@@ -482,7 +482,9 @@ if (window.tagger) {
             element.dispatchEvent(event);
         },
     };
+}
 
+const _taggerInit = () => {
     // Init tagger when DOM is ready
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", () => {
@@ -495,4 +497,7 @@ if (window.tagger) {
             window.tagger._init();
         }, 300);
     }
-}
+};
+_taggerInit();
+
+export { _taggerInit };
