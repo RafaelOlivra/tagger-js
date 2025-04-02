@@ -1,4 +1,6 @@
-**Tagger.js**_A lightweight user attribution library for persistent marketing data within the same domain and subdomains._
+**Tagger.js**
+
+A lightweight user attribution library for persistent marketing data within the same domain and subdomains._
 
 **Key Features:**
 
