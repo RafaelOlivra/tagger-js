@@ -1,6 +1,6 @@
 /**
  * Tagger - Simple user tagging
- * @version 1.0.2
+ * @version 1.2.2
  * @namespace tagger
  */
 
@@ -32,9 +32,9 @@ const tagger = {
 
         console.log("[Tagger] UserID:", userID);
 
-        // Prepare user URL params
-        window.taggerUserURLParams = this.getUserParams();
-        console.log("[Tagger] User URL Params:", window.taggerUserURLParams);
+        // Prepare user params
+        window.taggerUserParams = this.getUserParams();
+        console.log("[Tagger] User Params:", window.taggerUserParams);
 
         console.log("[Tagger] Ready!");
         this.triggerEvent(window, "tagger:init", [userID]);
@@ -231,20 +231,31 @@ const tagger = {
     },
 
     /**
-     * Returns the user parameters from URL or the tagger storage or URL.
+     * Returns the stored user parameters the tagger storage or URL.
      * @returns {object} - The user parameters.
      */
     getUserParams: function () {
         // Get the external parameters
         let params = new URLSearchParams(window.location.search);
-        let userURLParams = window?.taggerConfig?.userURLParams ?? ["utm_source", "utm_medium", "utm_campaign", "utm_term"];
+        let userParams = window?.taggerConfig?.userParams ?? ["utm_source", "utm_medium", "utm_campaign", "utm_term"];
+
+        // Fallback for older versions
+        if (!userParams && window?.taggerConfig?.userURLParams) {
+            userParams = window.taggerConfig.userURLParams;
+        }
 
         // Try to retrieve the params from the Storage first
-        let storedParams = this.getData("userURLParams");
+        let storedParams = this.getData("userParams");
+
+        // Fallback for older versions
+        if (!storedParams) {
+            storedParams = this.getData("userURLParams");
+        }
+
         if (!storedParams) {
             storedParams = {};
             // Retrieve the external parameters from the URL
-            userURLParams.forEach((param) => {
+            userParams.forEach((param) => {
                 if (params.has(param)) {
                     storedParams[param] = params.get(param);
                 }
@@ -254,7 +265,39 @@ const tagger = {
             storedParams["timestamp"] = new Date().getTime();
 
             // Store the external parameters in the storage
-            this.storeData("userURLParams", storedParams);
+            this.storeData("userParams", storedParams);
+        }
+
+        // Params can also be stored individually in a cookie
+        // Using the __tg-param-{{NAME}} format. So we need to read all
+        // matching cookies and merge them into the storedParams object
+        let hasCookieParams = false;
+        const cookies = document.cookie.split("; ");
+        cookies.forEach((cookie) => {
+            let [key, value] = cookie.split("=");
+
+            // Check if the cookie is a tagger param
+            if (!key.startsWith("__tg-param-")) return;
+
+            // If we already have the key in the storedParams, skip it
+            if (storedParams && storedParams[key]) return;
+
+            const cleanKey = key.trim().replace(/^__tg-param-/, "");
+            if (cleanKey) {
+                // Decode from base64
+                try {
+                    value = atob(decodeURIComponent(value).trim());
+                    storedParams[cleanKey] = value;
+                    hasCookieParams = true;
+                } catch (e) {
+                    console.error("[Tagger] Error decoding cookie value: ", e);
+                }
+            }
+        });
+
+        // If we've found cookie params, store them in the storage
+        if (hasCookieParams) {
+            this.storeData("userParams", storedParams);
         }
 
         // Make sure we have an object
@@ -283,7 +326,7 @@ const tagger = {
     setUserParam: function (param, value) {
         let userParams = this.getUserParams();
         userParams[param] = value;
-        this.storeData("userURLParams", userParams);
+        this.storeData("userParams", userParams);
     },
 
     /**
@@ -294,12 +337,12 @@ const tagger = {
      */
     storeData: function (key, value) {
         key = "__tg-" + key;
-        // Store the data in cookies and local storage
         try {
-            let serializedValue = JSON.stringify(value);
+            const json = JSON.stringify(value);
+            const base64 = btoa(encodeURIComponent(json)); // Safer for UTF-8
 
-            this.utilSetCookie(key, serializedValue, 365); // Store for 1 year
-            localStorage.setItem(key, serializedValue);
+            this.utilSetCookie(key, base64, 365);
+            localStorage.setItem(key, base64);
 
             return value;
         } catch (e) {
@@ -315,33 +358,33 @@ const tagger = {
     getData: function (key) {
         key = "__tg-" + key;
         try {
-            // Try cookie first
             let value = this.utilGetCookie(key);
             if (!value) {
                 value = localStorage.getItem(key);
                 if (value) {
-                    this.utilSetCookie(key, value, 365); // Store it back in the cookie
+                    this.utilSetCookie(key, value, 365);
                 }
             }
-            // Try to deserialize the value first
+
             if (value) {
                 try {
-                    const deserializedValue = JSON.parse(value);
-                    // Return on success
-                    if (deserializedValue) {
-                        return deserializedValue;
+                    const json = decodeURIComponent(atob(value));
+                    const parsed = JSON.parse(json);
+
+                    if (parsed && typeof parsed === "object") {
+                        return parsed;
                     }
                 } catch (e) {
-                    console.log("[Tagger] Error deserializing data, reverting to raw format: ", key);
+                    console.warn("[Tagger] Error decoding or parsing data for key:", key, e);
                 }
             }
 
-            return value;
+            return null; // Explicitly return null if parsing fails
         } catch (e) {
-            console.log("[Tagger] Error retrieving data: ", key);
+            console.error("[Tagger] Error retrieving data for key:", key, e);
+            return null;
         }
     },
-
     /**
      * Add the current URL parameters to the specified URL and appends the userID.
      * @param {string} url - The URL to move the parameters from.
