@@ -12,7 +12,8 @@ A lightweight user attribution library for persistent marketing data within the 
 
 ## Domain Scope:
 
-✔ Works across subdomains (example.com → shop.example.com)❌ Doesn't work cross-domain (example.com → anotherexample.com)
+✔ Works across subdomains (example.com → shop.example.com)
+❌ Doesn't work cross-domain (example.com → anotherexample.com)
 
 ## Ideal for:
 
