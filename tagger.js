@@ -371,7 +371,7 @@ const tagger = {
                     const json = decodeURIComponent(atob(value));
                     const parsed = JSON.parse(json);
 
-                    if (parsed && typeof parsed === "object") {
+                    if (parsed && (typeof parsed === "object" || typeof parsed === "string")) {
                         return parsed;
                     }
                 } catch (e) {
