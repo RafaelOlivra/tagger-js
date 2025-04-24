@@ -34,7 +34,6 @@ const tagger = {
 
         // Prepare user params
         window.taggerUserParams = this.getUserParams();
-        console.log("[Tagger] User Params:", window.taggerUserParams);
 
         console.log("[Tagger] Ready!");
         this.triggerEvent(window, "tagger:init", [userID]);
