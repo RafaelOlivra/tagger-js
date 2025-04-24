@@ -47,8 +47,8 @@ const tagger = {
     _bindEvents: function () {
         const that = this;
 
-        // .tg-form-submit
-        // Fires on form submit
+        /**  .tg-form-submit */
+        // Fires on the submit of any form with the class .tg-form-submit
         const formSubmit = document.querySelectorAll(".tg-form-submit");
         formSubmit.forEach((form) => {
             form.addEventListener("submit", function (event) {
@@ -56,14 +56,15 @@ const tagger = {
             });
         });
 
-        // .tg-child-conv-click
+        /**  .tg-child-conv-click */
+        // Fires on a click of any 'a' elements that are direct children of .tg-child-conv-click
         const swapLinks = document.querySelectorAll(".tg-swap-child-href>a");
         swapLinks.forEach((link) => {
             link.classList.add("tg-conv-click");
         });
 
-        // .tg-conv-click
-        // Fires on click
+        /**  .tg-conv-click */
+        // Fires on a click of any element with the class .tg-conv-click
         document.body.addEventListener("click", function (event) {
             if (event.target.closest(".tg-conv-click")) {
                 // Do parameter swapping on click and fire the callback
@@ -82,7 +83,7 @@ const tagger = {
             }
         });
 
-        // updated
+        /**  updated */
         // Reload tagger whenever an "updated" event happens on window
         // We should trigger only once as this event will be registered again on reload
         window.addEventListener(
