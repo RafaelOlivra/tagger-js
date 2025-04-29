@@ -327,6 +327,7 @@ const tagger = {
         let userParams = this.getUserParams();
         userParams[param] = value;
         this.storeData("userParams", userParams);
+        window.taggerUserParams = userParams;
     },
 
     /**
