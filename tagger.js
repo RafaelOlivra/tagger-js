@@ -1,6 +1,6 @@
 /**
  * Tagger - Simple user tagging
- * @version 1.2.2
+ * @version 1.2.5
  * @namespace tagger
  */
 
