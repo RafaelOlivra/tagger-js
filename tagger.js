@@ -1,6 +1,6 @@
 /**
  * Tagger - Simple user tagging
- * @version 1.2.6
+ * @version 1.2.7
  * @namespace tagger
  */
 
@@ -558,26 +558,46 @@ const tagger = {
 };
 
 const _taggerAutoInit = () => {
-    // Check if tagger is already loaded
-    if (window.tagger) {
-        console.log("[Tagger] Already loaded.");
+    // Avoid multiple inits
+    if (window.taggerLoaded || window.__taggerInitInProgress) {
+        console.log("[Tagger] Already initialized or in progress.");
         return;
     }
 
-    // Init tagger when DOM is ready
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", () => {
-            setTimeout(() => {
-                window.tagger = tagger;
-                window.tagger._init();
-            }, 300);
-        });
-    } else {
-        setTimeout(() => {
+    window.__taggerInitInProgress = true;
+
+    const initialize = () => {
+        try {
+            if (window.taggerLoaded) return;
+            if (typeof tagger === "undefined") {
+                console.warn("[Tagger] tagger object is not defined.");
+                return;
+            }
+
             window.tagger = tagger;
             window.tagger._init();
-        }, 300);
+            window.taggerLoaded = true;
+            console.log("[Tagger] Initialized.");
+        } catch (e) {
+            console.error("[Tagger] Initialization failed:", e);
+        } finally {
+            window.__taggerInitInProgress = false;
+        }
+    };
+
+    // If DOM is already ready, no need to poll
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+        initialize();
+        return;
     }
+
+    // Poll until DOM is ready
+    const initInterval = setInterval(() => {
+        if (document.readyState === "complete" || document.readyState === "interactive") {
+            clearInterval(initInterval);
+            initialize();
+        }
+    }, 100);
 };
 
 // Init tagger
