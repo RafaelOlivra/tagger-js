@@ -1,6 +1,6 @@
 /**
  * Tagger - Simple user tagging
- * @version 1.2.5
+ * @version 1.2.6
  * @namespace tagger
  */
 
@@ -92,7 +92,7 @@ const tagger = {
                     await that.reload();
                 }, 100);
             },
-            { once: true }
+            { once: true },
         );
     },
 
@@ -228,18 +228,13 @@ const tagger = {
     },
 
     /**
-     * Returns the stored user parameters the tagger storage or URL.
+     * Returns the stored user parameters from the tagger storage or URL.
      * @returns {object} - The user parameters.
      */
     getUserParams: function () {
         // Get the external parameters
         let params = new URLSearchParams(window.location.search);
-        let userParams = window?.taggerConfig?.userParams ?? [
-            "utm_source",
-            "utm_medium",
-            "utm_campaign",
-            "utm_term",
-        ];
+        let userParams = window?.taggerConfig?.userParams ?? ["utm_source", "utm_medium", "utm_campaign", "utm_term", "gclid", "gbraid", "fbclid", "ref"];
 
         // Fallback for older versions
         if (!userParams && window?.taggerConfig?.userURLParams) {
@@ -254,26 +249,30 @@ const tagger = {
             storedParams = this.getData("userURLParams");
         }
 
-        if (!storedParams) {
+        // Initialize if not found
+        if (!storedParams || typeof storedParams !== "object") {
             storedParams = {};
-            // Retrieve the external parameters from the URL
-            userParams.forEach((param) => {
-                if (params.has(param)) {
-                    storedParams[param] = params.get(param);
-                }
-            });
+        }
 
-            // Store timestamp
+        let updated = false;
+
+        // Retrieve the external parameters from the URL and merge only missing ones
+        userParams.forEach((param) => {
+            if (params.has(param) && !(param in storedParams)) {
+                storedParams[param] = params.get(param);
+                updated = true;
+            }
+        });
+
+        // Store timestamp
+        if (!storedParams["timestamp"]) {
             storedParams["timestamp"] = new Date().getTime();
-
-            // Store the external parameters in the storage
-            this.storeData("userParams", storedParams);
+            updated = true;
         }
 
         // Params can also be stored individually in a cookie
         // Using the __tg-param-{{NAME}} format. So we need to read all
         // matching cookies and merge them into the storedParams object
-        let hasCookieParams = false;
         const cookies = document.cookie.split("; ");
         cookies.forEach((cookie) => {
             let [key, value] = cookie.split("=");
@@ -281,30 +280,24 @@ const tagger = {
             // Check if the cookie is a tagger param
             if (!key.startsWith("__tg-param-")) return;
 
-            // If we already have the key in the storedParams, skip it
-            if (storedParams && storedParams[key]) return;
-
             const cleanKey = key.trim().replace(/^__tg-param-/, "");
-            if (cleanKey) {
-                // Decode from base64
-                try {
-                    value = atob(decodeURIComponent(value).trim());
-                    storedParams[cleanKey] = value;
-                    hasCookieParams = true;
-                } catch (e) {
-                    console.error("[Tagger] Error decoding cookie value: ", e);
-                }
+
+            // If we already have the key in the storedParams, skip it
+            if (!cleanKey || cleanKey in storedParams) return;
+
+            // Decode from base64
+            try {
+                value = atob(decodeURIComponent(value).trim());
+                storedParams[cleanKey] = value;
+                updated = true;
+            } catch (e) {
+                console.error("[Tagger] Error decoding cookie value: ", e);
             }
         });
 
-        // If we've found cookie params, store them in the storage
-        if (hasCookieParams) {
+        // If we've added or updated anything, save it
+        if (updated) {
             this.storeData("userParams", storedParams);
-        }
-
-        // Make sure we have an object
-        if (typeof storedParams !== "object") {
-            storedParams = {};
         }
 
         return storedParams;
@@ -374,19 +367,11 @@ const tagger = {
                     const json = decodeURIComponent(atob(value));
                     const parsed = JSON.parse(json);
 
-                    if (
-                        parsed &&
-                        (typeof parsed === "object" ||
-                            typeof parsed === "string")
-                    ) {
+                    if (parsed && (typeof parsed === "object" || typeof parsed === "string")) {
                         return parsed;
                     }
                 } catch (e) {
-                    console.warn(
-                        "[Tagger] Error decoding or parsing data for key:",
-                        key,
-                        e
-                    );
+                    console.warn("[Tagger] Error decoding or parsing data for key:", key, e);
                 }
             }
 
@@ -420,10 +405,7 @@ const tagger = {
             }
             return newURL.href;
         } catch (error) {
-            console.error(
-                "[Tagger] Error moving URL params to new URL: ",
-                error
-            );
+            console.error("[Tagger] Error moving URL params to new URL: ", error);
             return url;
         }
     },
@@ -435,9 +417,7 @@ const tagger = {
     utilGetUserIp: async function () {
         try {
             // Try with IPify first
-            const ipifyResponse = await fetch(
-                "https://api.ipify.org?format=json"
-            );
+            const ipifyResponse = await fetch("https://api.ipify.org?format=json");
             if (ipifyResponse.ok) {
                 const data = await ipifyResponse.json();
                 if (this.utilValidateIp(data.ip)) {
@@ -492,9 +472,7 @@ const tagger = {
         const msgBuffer = new TextEncoder().encode(message);
         const hashBuffer = await crypto.subtle.digest("SHA-1", msgBuffer);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray
-            .map((b) => ("00" + b.toString(16)).slice(-2))
-            .join("");
+        const hashHex = hashArray.map((b) => ("00" + b.toString(16)).slice(-2)).join("");
         return hashHex;
     },
 
@@ -507,10 +485,7 @@ const tagger = {
         if (!url) return url;
 
         // Remove any script tags
-        url = url.replace(
-            /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
-            ""
-        );
+        url = url.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
         // Remove any potentially dangerous characters or sequences
         url = url.replace(/[\\"'<>(){}]/g, "");
         url = url.trim();
@@ -551,14 +526,7 @@ const tagger = {
             date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
             expires = "; expires=" + date.toUTCString();
         }
-        document.cookie =
-            name +
-            "=" +
-            (value || "") +
-            expires +
-            "; domain=" +
-            this.utilGetCurrentDomain() +
-            "; path=/";
+        document.cookie = name + "=" + (value || "") + expires + "; domain=" + this.utilGetCurrentDomain() + "; path=/";
     },
 
     /**
@@ -572,8 +540,7 @@ const tagger = {
         for (let i = 0; i < ca.length; i++) {
             let c = ca[i];
             while (c.charAt(0) === " ") c = c.substring(1, c.length);
-            if (c.indexOf(nameEQ) === 0)
-                return c.substring(nameEQ.length, c.length);
+            if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
         }
         return null;
     },
