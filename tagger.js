@@ -36,9 +36,10 @@ const tagger = {
         window.taggerUserParams = this.getUserParams();
 
         console.log("[Tagger] Ready!");
-        this.triggerEvent(window, "tagger:init", [userID]);
-
-        await this.reload();
+        setTimeout(async () => {
+            this.triggerEvent(window, "tagger:init", [userID]);
+            await this.reload();
+        }, 10);
     },
 
     /**
