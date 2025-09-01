@@ -1,6 +1,6 @@
 /**
  * Tagger - Simple user tagging
- * @version 1.2.7
+ * @version 1.2.8
  * @namespace tagger
  */
 
@@ -408,6 +408,16 @@ const tagger = {
             console.error("[Tagger] Error moving URL params to new URL: ", error);
             return url;
         }
+    },
+
+    /**
+     * Retrieves a URL parameter by name.
+     * @param {string} param - The name of the parameter to retrieve.
+     * @returns {string|null} - The value of the parameter or null if not found.
+     */
+    utilGetParamFromURL: function (param) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(param);
     },
 
     /**
