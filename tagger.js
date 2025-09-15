@@ -36,10 +36,14 @@ const tagger = {
         window.taggerUserParams = this.getUserParams();
 
         console.log("[Tagger] Ready!");
-        setTimeout(async () => {
-            this.triggerEvent(window, "tagger:init", [userID]);
-            await this.reload();
-        }, 10);
+
+        // Wait for document ready
+        document.addEventListener("DOMContentLoaded", async () => {
+            setTimeout(async () => {
+                this.triggerEvent(window, "tagger:init", [userID]);
+                await this.reload();
+            }, 100);
+        });
     },
 
     /**
@@ -93,7 +97,7 @@ const tagger = {
                     await that.reload();
                 }, 100);
             },
-            { once: true },
+            { once: true }
         );
     },
 
@@ -235,7 +239,16 @@ const tagger = {
     getUserParams: function () {
         // Get the external parameters
         let params = new URLSearchParams(window.location.search);
-        let userParams = window?.taggerConfig?.userParams ?? ["utm_source", "utm_medium", "utm_campaign", "utm_term", "gclid", "gbraid", "fbclid", "ref"];
+        let userParams = window?.taggerConfig?.userParams ?? [
+            "utm_source",
+            "utm_medium",
+            "utm_campaign",
+            "utm_term",
+            "gclid",
+            "gbraid",
+            "fbclid",
+            "ref",
+        ];
 
         // Fallback for older versions
         if (!userParams && window?.taggerConfig?.userURLParams) {
@@ -368,11 +381,19 @@ const tagger = {
                     const json = decodeURIComponent(atob(value));
                     const parsed = JSON.parse(json);
 
-                    if (parsed && (typeof parsed === "object" || typeof parsed === "string")) {
+                    if (
+                        parsed &&
+                        (typeof parsed === "object" ||
+                            typeof parsed === "string")
+                    ) {
                         return parsed;
                     }
                 } catch (e) {
-                    console.warn("[Tagger] Error decoding or parsing data for key:", key, e);
+                    console.warn(
+                        "[Tagger] Error decoding or parsing data for key:",
+                        key,
+                        e
+                    );
                 }
             }
 
@@ -406,7 +427,10 @@ const tagger = {
             }
             return newURL.href;
         } catch (error) {
-            console.error("[Tagger] Error moving URL params to new URL: ", error);
+            console.error(
+                "[Tagger] Error moving URL params to new URL: ",
+                error
+            );
             return url;
         }
     },
@@ -428,7 +452,9 @@ const tagger = {
     utilGetUserIp: async function () {
         try {
             // Try with IPify first
-            const ipifyResponse = await fetch("https://api.ipify.org?format=json");
+            const ipifyResponse = await fetch(
+                "https://api.ipify.org?format=json"
+            );
             if (ipifyResponse.ok) {
                 const data = await ipifyResponse.json();
                 if (this.utilValidateIp(data.ip)) {
@@ -483,7 +509,9 @@ const tagger = {
         const msgBuffer = new TextEncoder().encode(message);
         const hashBuffer = await crypto.subtle.digest("SHA-1", msgBuffer);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map((b) => ("00" + b.toString(16)).slice(-2)).join("");
+        const hashHex = hashArray
+            .map((b) => ("00" + b.toString(16)).slice(-2))
+            .join("");
         return hashHex;
     },
 
@@ -496,7 +524,10 @@ const tagger = {
         if (!url) return url;
 
         // Remove any script tags
-        url = url.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+        url = url.replace(
+            /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+            ""
+        );
         // Remove any potentially dangerous characters or sequences
         url = url.replace(/[\\"'<>(){}]/g, "");
         url = url.trim();
@@ -537,7 +568,14 @@ const tagger = {
             date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
             expires = "; expires=" + date.toUTCString();
         }
-        document.cookie = name + "=" + (value || "") + expires + "; domain=" + this.utilGetCurrentDomain() + "; path=/";
+        document.cookie =
+            name +
+            "=" +
+            (value || "") +
+            expires +
+            "; domain=" +
+            this.utilGetCurrentDomain() +
+            "; path=/";
     },
 
     /**
@@ -551,7 +589,8 @@ const tagger = {
         for (let i = 0; i < ca.length; i++) {
             let c = ca[i];
             while (c.charAt(0) === " ") c = c.substring(1, c.length);
-            if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+            if (c.indexOf(nameEQ) === 0)
+                return c.substring(nameEQ.length, c.length);
         }
         return null;
     },
@@ -597,14 +636,20 @@ const _taggerAutoInit = () => {
     };
 
     // If DOM is already ready, no need to poll
-    if (document.readyState === "complete" || document.readyState === "interactive") {
+    if (
+        document.readyState === "complete" ||
+        document.readyState === "interactive"
+    ) {
         initialize();
         return;
     }
 
     // Poll until DOM is ready
     const initInterval = setInterval(() => {
-        if (document.readyState === "complete" || document.readyState === "interactive") {
+        if (
+            document.readyState === "complete" ||
+            document.readyState === "interactive"
+        ) {
             clearInterval(initInterval);
             initialize();
         }
