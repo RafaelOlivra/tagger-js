@@ -26,7 +26,25 @@ const tagger = {
             return;
         }
 
-        // Retrieve the user ID and store it in the global scope
+        // Check if remoteSync is enabled
+        let userExists = await this.userExists();
+        const remoteSyncEnabled = window?.taggerConfig?.remoteSync && window?.taggerConfig?.remoteEndpoint;
+        if (remoteSyncEnabled) {
+            try {
+                if (userExists) {
+                    console.log("[Tagger] Syncing existing user data with remote...");
+                } else {
+                    console.log("[Tagger] No existing user. Syncing by user IP...");
+                }
+
+                await this._syncRemoteData();
+            } catch (error) {
+                console.error("[Tagger] Remote sync error during init: ", error);
+                console.log("[Tagger] Proceeding with local data only.");
+            }
+        }
+
+        // Retrieve or Create the user ID and store it in the global scope
         const userID = await this._retrieveUserID();
         window.taggerUserID = userID;
 
@@ -45,6 +63,10 @@ const tagger = {
             }, 100);
         });
     },
+
+    //-----------------------------
+    // Callback functions
+    //-----------------------------
 
     /**
      * Binds events for the Tagger module.
@@ -97,84 +119,8 @@ const tagger = {
                     await that.reload();
                 }, 100);
             },
-            { once: true }
+            { once: true },
         );
-    },
-
-    /**
-     * Retrieves the user ID from the local storage.
-     * If the user ID does not exist, creates a new one and stores it in the local storage.
-     * Triggers the "tagger:userIDCreated" event when a new user ID is created.
-     * @returns {Promise<string>} - The user ID.
-     */
-    _retrieveUserID: async function () {
-        // Get the user ID from the local storage
-        let userID = this.getData("userID");
-        if (!userID) {
-            const prefix = window?.taggerConfig?.prefix ?? "tg-";
-            userID = await this.createNewUserID(prefix);
-
-            this.storeData("userID", userID);
-            this.storeData("userCreateTime", new Date().getTime());
-
-            console.log("[Tagger] UserID Created");
-            this.triggerEvent(window, "tagger:userIDCreated", [userID]);
-        }
-        return userID;
-    },
-
-    /**
-     * Reloads the Tagger module.
-     * Binds events and performs parameter swapping.
-     * Triggers the "tagger:reload" event.
-     * @returns {Promise<void>}
-     */
-    reload: async function () {
-        this._bindEvents();
-
-        console.log("[Tagger] Reloaded");
-        this.triggerEvent(window, "tagger:reload");
-    },
-
-    /**
-     * Returns the instance of the Tagger module.
-     * @returns {tagger} - The Tagger instance.
-     */
-    getInstance: function () {
-        return this;
-    },
-
-    /**
-     * Performs URL parameter swapping for elements with the class ".tg-swap-href".
-     * Swaps the href of the element with the current URL and appends the userID.
-     */
-    doParamsSwap: function () {
-        const that = this;
-
-        // .tg-swap-child-href
-        const childLinks = document.querySelectorAll(".tg-swap-child-href>a");
-        childLinks.forEach((link) => {
-            link.classList.add("tg-swap-href");
-        });
-
-        // .tg-swap-href
-        // Swap the href of the element with the current URL and append the userID
-        const swapLinks = document.querySelectorAll(".tg-swap-href");
-
-        for (const el of swapLinks) {
-            if (el.classList.contains("tg-swap-href-done")) {
-                continue;
-            }
-
-            let href = el.getAttribute("href");
-            let newHref = that.utilMoveURLParamsToNewURL(href);
-
-            // Sanitize the URL
-            newHref = that.utilSanitizeURL(newHref);
-
-            el.setAttribute("href", newHref);
-            el.classList.add("tg-swap-href-done");
-        }
     },
 
     /**
@@ -206,6 +152,19 @@ const tagger = {
         }
     },
 
+    //-----------------------------
+    // User ID functions
+    //-----------------------------
+
+    /**
+     * Checks if a user ID exists in the Tagger storage.
+     * @returns {boolean} - Returns true if a user ID exists, false otherwise.
+     */
+    userExists: async function () {
+        const userID = await this._retrieveUserID(false);
+        return !!userID;
+    },
+
     /**
      * Retrieves the user ID from the local storage.
      * If the user ID does not exist, creates a new one and stores it in the local storage.
@@ -214,6 +173,31 @@ const tagger = {
      */
     getUserID() {
         return window.taggerUserID;
+    },
+
+    /**
+     * Retrieves the user ID from the local storage.
+     * If the user ID does not exist, creates a new one and stores it in the local storage.
+     * Triggers the "tagger:userIDCreated" event when a new user ID is created.
+     * @param {boolean} [autoCreate=true] - Whether to create a new user ID if it does not exist.
+     * @returns {Promise<string>} - The user ID.
+     */
+    _retrieveUserID: async function (autoCreate = true) {
+        // Get the user ID from the local storage
+        let userID = this.getData("userID");
+        if (!userID && autoCreate) {
+            const prefix = window?.taggerConfig?.prefix ?? "tg-";
+            const currentTime = new Date().getTime();
+            userID = await this.createNewUserID(prefix);
+
+            this.storeData("userID", userID);
+            this.storeData("userCreateTime", currentTime);
+            this.storeData("updatedTime", currentTime);
+
+            console.log("[Tagger] UserID Created");
+            this.triggerEvent(window, "tagger:userIDCreated", [userID]);
+        }
+        return userID;
     },
 
     /**
@@ -232,6 +216,10 @@ const tagger = {
         return (prefix ?? "") + userID;
     },
 
+    //-----------------------------
+    // User parameters functions
+    //-----------------------------
+
     /**
      * Returns the stored user parameters from the tagger storage or URL.
      * @returns {object} - The user parameters.
@@ -239,16 +227,7 @@ const tagger = {
     getUserParams: function () {
         // Get the external parameters
         let params = new URLSearchParams(window.location.search);
-        let userParams = window?.taggerConfig?.userParams ?? [
-            "utm_source",
-            "utm_medium",
-            "utm_campaign",
-            "utm_term",
-            "gclid",
-            "gbraid",
-            "fbclid",
-            "ref",
-        ];
+        let userParams = window?.taggerConfig?.userParams ?? ["utm_source", "utm_medium", "utm_campaign", "utm_term", "gclid", "gbraid", "fbclid", "ref"];
 
         // Fallback for older versions
         if (!userParams && window?.taggerConfig?.userURLParams) {
@@ -312,6 +291,7 @@ const tagger = {
         // If we've added or updated anything, save it
         if (updated) {
             this.storeData("userParams", storedParams);
+            this.storeData("updatedTime", new Date().getTime());
         }
 
         return storedParams;
@@ -335,9 +315,16 @@ const tagger = {
     setUserParam: function (param, value) {
         let userParams = this.getUserParams();
         userParams[param] = value;
+
         this.storeData("userParams", userParams);
+        this.storeData("updatedTime", new Date().getTime());
+
         window.taggerUserParams = userParams;
     },
+
+    //-----------------------------
+    // Storage functions
+    //-----------------------------
 
     /**
      * Stores data in the Tagger storage.
@@ -381,19 +368,11 @@ const tagger = {
                     const json = decodeURIComponent(atob(value));
                     const parsed = JSON.parse(json);
 
-                    if (
-                        parsed &&
-                        (typeof parsed === "object" ||
-                            typeof parsed === "string")
-                    ) {
+                    if (parsed && (typeof parsed === "object" || typeof parsed === "string")) {
                         return parsed;
                     }
                 } catch (e) {
-                    console.warn(
-                        "[Tagger] Error decoding or parsing data for key:",
-                        key,
-                        e
-                    );
+                    console.warn("[Tagger] Error decoding or parsing data for key:", key, e);
                 }
             }
 
@@ -402,6 +381,261 @@ const tagger = {
             console.error("[Tagger] Error retrieving data for key:", key, e);
             return null;
         }
+    },
+
+    //-----------------------------
+    // Remote Sync functions
+    //-----------------------------
+    /**
+     * Synchronizes Tagger data (userParams, userID, userCreateTime) with a remote endpoint.
+     * @param {boolean} [forceUpdate=false] - Forces a POST request to update the remote server.
+     * @returns {Promise<void>}
+     * * Security Note: The remote server endpoint is responsible for validating the request's
+     * IP source, User Agent, and Referer to prevent abuse or unauthorized data storage.
+     */
+    _syncRemoteData: async function (forceUpdate = false) {
+        if (!window?.taggerConfig?.remoteSync || !window.taggerConfig.remoteEndpoint) {
+            return;
+        }
+
+        const endpoint = window.taggerConfig.remoteEndpoint;
+        const localData = this._getSyncableData();
+        const hasLocalData = Object.keys(localData).length > 2; // Check for more than just IP and updatedTime/timestamp
+
+        const ip = await this.utilGetUserIp();
+
+        try {
+            // Determine sync action
+            let action = hasLocalData && !forceUpdate ? "GET_CHECK" : "GET_FULL";
+            if (hasLocalData && (forceUpdate || this.isLocalDataNewer(localData))) {
+                action = "POST";
+            } else if (hasLocalData && !this.isLocalDataNewer(localData)) {
+                action = "GET_CHECK";
+            }
+
+            console.log(`[Tagger] Remote sync action: ${action}`);
+
+            // Execute sync action
+            let responseData = null;
+            let finalEndpoint = endpoint;
+
+            if (action === "POST") {
+                // POST: Send local data to remote server
+                const payload = this._prepareRemotePayload(ip, localData);
+                const response = await fetch(finalEndpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+
+                if (response.ok) {
+                    responseData = await response.json();
+                    if (responseData.updated) {
+                        // Successfully updated remote, no local change expected unless server returns new data
+                        console.log("[Tagger] Remote data updated.");
+                    } else {
+                        // Server might return newer data on POST if it received a race condition update
+                        if (responseData.data && this.isRemoteDataNewer(responseData.data)) {
+                            this._applyRemoteData(responseData.data);
+                        }
+                    }
+                } else {
+                    console.error("[Tagger] Remote sync POST failed:", response.statusText);
+                }
+                return;
+            } else {
+                // GET_FULL / GET_CHECK: Retrieve data or check for updates
+                // Encode IP and optional local timestamp for server
+                const encodedIP = btoa(ip);
+                finalEndpoint += `?ip=${encodedIP}`;
+
+                if (action === "GET_CHECK") {
+                    // Check only, include local timestamp
+                    const localUpdatedTime = localData.updatedTime || localData.userParams?.timestamp || 0;
+                    if (localUpdatedTime) {
+                        finalEndpoint += `&updatedTime=${localUpdatedTime}`;
+                    }
+                }
+
+                const response = await fetch(finalEndpoint, { method: "GET" });
+
+                if (response.ok) {
+                    responseData = await response.json();
+
+                    if (responseData.data) {
+                        // Response contains base64 encoded data
+                        const decodedData = this._decodeRemoteData(responseData.data);
+                        if (decodedData && this.isRemoteDataNewer(decodedData)) {
+                            this._applyRemoteData(decodedData);
+                        } else {
+                            console.log("[Tagger] Remote data is not newer or is invalid.");
+                        }
+                    } else if (responseData.updated === false) {
+                        // GET_CHECK response: local data is newer or same as remote
+                        // Force an update to the server (POST request) to ensure sync
+                        if (action === "GET_CHECK") {
+                            await this._syncRemoteData(true);
+                        }
+                    }
+                } else {
+                    console.error("[Tagger] Remote sync GET failed:", response.statusText);
+                }
+            }
+        } catch (error) {
+            console.error("[Tagger] Remote sync communication error: ", error);
+        }
+    },
+
+    /**
+     * Prepares the data to be sent to the remote endpoint.
+     * @param {string} ip - The user's IP address.
+     * @param {object} localData - The local Tagger data.
+     * @returns {object} - The payload for the remote server.
+     */
+    _prepareRemotePayload: function (ip, localData) {
+        const data = {
+            ...localData,
+            ip: ip,
+            userAgent: navigator.userAgent,
+            referer: document.referrer,
+        };
+        const json = JSON.stringify(data);
+        const base64 = btoa(encodeURIComponent(json));
+        return { data: base64 };
+    },
+
+    /**
+     * Retrieves Tagger data relevant for synchronization.
+     * @returns {object} - The syncable data object.
+     */
+    _getSyncableData: function () {
+        const data = {};
+        const userID = this.getData("userID");
+        const userParams = this.getData("userParams");
+        const userCreateTime = this.getData("userCreateTime");
+        const updatedTime = this.getData("updatedTime"); // New tracking key
+
+        if (userID) data.userID = userID;
+        if (userParams) data.userParams = userParams;
+        if (userCreateTime) data.userCreateTime = userCreateTime;
+        if (updatedTime) data.updatedTime = updatedTime;
+
+        return data;
+    },
+
+    /**
+     * Checks if the local data's updatedTime is newer than a potential remote update.
+     * @param {object} localData - The local Tagger data.
+     * @returns {boolean}
+     */
+    isLocalDataNewer: function (localData) {
+        const localTime = localData.updatedTime || localData.userParams?.timestamp || 0;
+        const remoteUpdateTime = this.getData("remoteUpdatedTime") || 0;
+        return localTime > remoteUpdateTime;
+    },
+
+    /**
+     * Checks if the remote data's updatedTime is newer than the local data.
+     * @param {object} remoteData - The decoded remote data.
+     * @returns {boolean}
+     */
+    isRemoteDataNewer: function (remoteData) {
+        const localTime = this.getData("updatedTime") || this.getData("userParams")?.timestamp || 0;
+        const remoteTime = remoteData.updatedTime || remoteData.userParams?.timestamp || 0;
+        // Only consider it newer if it's strictly greater (and not equal, to avoid ping-pong)
+        return remoteTime > localTime;
+    },
+
+    /**
+     * Decodes and parses remote data from a base64 string.
+     * @param {string} base64Data - The base64 encoded data.
+     * @returns {object|null} - The decoded data or null on failure.
+     */
+    _decodeRemoteData: function (base64Data) {
+        try {
+            const json = decodeURIComponent(atob(base64Data));
+            return JSON.parse(json);
+        } catch (e) {
+            console.error("[Tagger] Error decoding or parsing remote data: ", e);
+            return null;
+        }
+    },
+
+    /**
+     * Applies the received remote data to local Tagger storage.
+     * @param {object} data - The decoded data from the remote server.
+     */
+    _applyRemoteData: function (data) {
+        if (data.userID) {
+            this.storeData("userID", data.userID);
+            window.taggerUserID = data.userID; // Update global scope
+        }
+        if (data.userParams) {
+            // Merge with existing params to preserve any non-synced data if needed, but for simplicity, overwrite
+            this.storeData("userParams", data.userParams);
+            window.taggerUserParams = data.userParams; // Update global scope
+        }
+        if (data.userCreateTime) this.storeData("userCreateTime", data.userCreateTime);
+        if (data.updatedTime) this.storeData("updatedTime", data.updatedTime); // Store the remote updated time
+
+        console.log("[Tagger] Remote data applied.");
+        this.triggerEvent(window, "tagger:remoteSyncApplied");
+    },
+
+    //-----------------------------
+    // Utility functions
+    //-----------------------------
+    /**
+     * Returns the instance of the Tagger module.
+     * @returns {tagger} - The Tagger instance.
+     */
+    getInstance: function () {
+        return this;
+    },
+
+    /**
+     * Performs URL parameter swapping for elements with the class ".tg-swap-href".
+     * Swaps the href of the element with the current URL and appends the userID.
+     */
+    doParamsSwap: function () {
+        const that = this;
+
+        // .tg-swap-child-href
+        const childLinks = document.querySelectorAll(".tg-swap-child-href>a");
+        childLinks.forEach((link) => {
+            link.classList.add("tg-swap-href");
+        });
+
+        // .tg-swap-href
+        // Swap the href of the element with the current URL and append the userID
+        const swapLinks = document.querySelectorAll(".tg-swap-href");
+
+        for (const el of swapLinks) {
+            if (el.classList.contains("tg-swap-href-done")) {
+                continue;
+            }
+
+            let href = el.getAttribute("href");
+            let newHref = that.utilMoveURLParamsToNewURL(href);
+
+            // Sanitize the URL
+            newHref = that.utilSanitizeURL(newHref);
+
+            el.setAttribute("href", newHref);
+            el.classList.add("tg-swap-href-done");
+        }
+    },
+    /**
+     * Reloads the Tagger module.
+     * Binds events and performs parameter swapping.
+     * Triggers the "tagger:reload" event.
+     * @returns {Promise<void>}
+     */
+    reload: async function () {
+        this._bindEvents();
+
+        console.log("[Tagger] Reloaded");
+        this.triggerEvent(window, "tagger:reload");
     },
     /**
      * Add the current URL parameters to the specified URL and appends the userID.
@@ -427,10 +661,7 @@ const tagger = {
             }
             return newURL.href;
         } catch (error) {
-            console.error(
-                "[Tagger] Error moving URL params to new URL: ",
-                error
-            );
+            console.error("[Tagger] Error moving URL params to new URL: ", error);
             return url;
         }
     },
@@ -452,9 +683,7 @@ const tagger = {
     utilGetUserIp: async function () {
         try {
             // Try with IPify first
-            const ipifyResponse = await fetch(
-                "https://api.ipify.org?format=json"
-            );
+            const ipifyResponse = await fetch("https://api.ipify.org?format=json");
             if (ipifyResponse.ok) {
                 const data = await ipifyResponse.json();
                 if (this.utilValidateIp(data.ip)) {
@@ -509,9 +738,7 @@ const tagger = {
         const msgBuffer = new TextEncoder().encode(message);
         const hashBuffer = await crypto.subtle.digest("SHA-1", msgBuffer);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray
-            .map((b) => ("00" + b.toString(16)).slice(-2))
-            .join("");
+        const hashHex = hashArray.map((b) => ("00" + b.toString(16)).slice(-2)).join("");
         return hashHex;
     },
 
@@ -524,10 +751,7 @@ const tagger = {
         if (!url) return url;
 
         // Remove any script tags
-        url = url.replace(
-            /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
-            ""
-        );
+        url = url.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
         // Remove any potentially dangerous characters or sequences
         url = url.replace(/[\\"'<>(){}]/g, "");
         url = url.trim();
@@ -568,14 +792,7 @@ const tagger = {
             date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
             expires = "; expires=" + date.toUTCString();
         }
-        document.cookie =
-            name +
-            "=" +
-            (value || "") +
-            expires +
-            "; domain=" +
-            this.utilGetCurrentDomain() +
-            "; path=/";
+        document.cookie = name + "=" + (value || "") + expires + "; domain=" + this.utilGetCurrentDomain() + "; path=/";
     },
 
     /**
@@ -589,8 +806,7 @@ const tagger = {
         for (let i = 0; i < ca.length; i++) {
             let c = ca[i];
             while (c.charAt(0) === " ") c = c.substring(1, c.length);
-            if (c.indexOf(nameEQ) === 0)
-                return c.substring(nameEQ.length, c.length);
+            if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
         }
         return null;
     },
@@ -607,6 +823,10 @@ const tagger = {
     },
 };
 
+/**
+ * Automatically initializes the Tagger module when the DOM is ready.
+ * Ensures that the initialization happens only once.
+ */
 const _taggerAutoInit = () => {
     // Avoid multiple inits
     if (window.taggerLoaded || window.__taggerInitInProgress) {
@@ -636,20 +856,14 @@ const _taggerAutoInit = () => {
     };
 
     // If DOM is already ready, no need to poll
-    if (
-        document.readyState === "complete" ||
-        document.readyState === "interactive"
-    ) {
+    if (document.readyState === "complete" || document.readyState === "interactive") {
         initialize();
         return;
     }
 
     // Poll until DOM is ready
     const initInterval = setInterval(() => {
-        if (
-            document.readyState === "complete" ||
-            document.readyState === "interactive"
-        ) {
+        if (document.readyState === "complete" || document.readyState === "interactive") {
             clearInterval(initInterval);
             initialize();
         }
