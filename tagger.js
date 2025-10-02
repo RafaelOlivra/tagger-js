@@ -400,7 +400,7 @@ const tagger = {
 
         const endpoint = window.taggerConfig.remoteEndpoint;
         const localData = this._getSyncableData();
-        const hasLocalData = Object.keys(localData).length > 2; // Check for more than just IP and updatedTime/timestamp
+        const hasLocalData = Object.keys(localData).length >= 2; // Check for more than just IP and updatedTime/timestamp
 
         const ip = await this.utilGetUserIp();
 
@@ -690,20 +690,20 @@ const tagger = {
                     return data.ip;
                 }
             }
-
-            // Fallback to IPinfo if IPify fails
-            const ipinfoResponse = await fetch("https://ipinfo.io/json");
-            if (ipinfoResponse.ok) {
-                const data = await ipinfoResponse.json();
-                if (this.utilValidateIp(data.ip)) {
-                    return data.ip;
-                }
-            }
-
-            return "unknown";
         } catch (error) {
-            console.error("[Tagger] Error retrieving user ip: ", error);
-            return "unknown";
+            try {
+                // Fallback to IPinfo if IPify fails
+                const ipinfoResponse = await fetch("https://ipinfo.io/json");
+                if (ipinfoResponse.ok) {
+                    const data = await ipinfoResponse.json();
+                    if (this.utilValidateIp(data.ip)) {
+                        return data.ip;
+                    }
+                }
+            } catch (error) {
+                console.error("[Tagger] Error retrieving user ip: ", error);
+                return "unknown";
+            }
         }
     },
 
