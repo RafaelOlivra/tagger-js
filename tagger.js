@@ -59,8 +59,6 @@ const tagger = {
         // Prepare user params
         window.taggerUserParams = this.getUserParams();
 
-        console.log("[Tagger] Ready!");
-
         // Wait for document ready
         document.addEventListener("DOMContentLoaded", async () => {
             setTimeout(async () => {
@@ -68,6 +66,17 @@ const tagger = {
                 await this.reload();
             }, 100);
         });
+
+        // Set auto sync interval if enabled
+        const autoSyncInterval = window?.taggerConfig?.autoSyncInterval ?? 0;
+        if (autoSyncInterval > 0) {
+            console.log(`[Tagger] Auto sync enabled every ${autoSyncInterval} ms.`);
+            setInterval(async () => {
+                await this._syncRemoteData();
+            }, autoSyncInterval);
+        }
+
+        console.log("[Tagger] Ready!");
     },
 
     //-----------------------------
@@ -433,7 +442,7 @@ const tagger = {
         const localData = this._getSyncableData();
         const hasLocalData = Object.keys(localData).length >= 2; // Check for more than just IP and updatedTime/timestamp
 
-        console.log("[Tagger] Local data available for sync:", localData);
+        // console.log("[Tagger] Local data available for sync:", localData);
 
         try {
             // Determine sync action
@@ -561,7 +570,7 @@ const tagger = {
         if (userCreateTime) data.userCreateTime = userCreateTime;
         if (updatedTime) data.updatedTime = updatedTime;
 
-        console.log("[Tagger] Syncable data:", data);
+        // console.log("[Tagger] Syncable data:", data);
 
         return data;
     },
