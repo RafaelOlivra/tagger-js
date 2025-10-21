@@ -9,6 +9,12 @@
  */
 const tagger = {
     /**
+     * Lock to prevent concurrent remote sync operations.
+     * @type {boolean}
+     */
+    SYNC_LOCK: false,
+
+    /**
      * The main callback function for Tagger events.
      * @type {Function|null}
      */
@@ -32,9 +38,9 @@ const tagger = {
         if (remoteSyncEnabled) {
             try {
                 if (userExists) {
-                    console.log("[Tagger] Syncing existing user data with remote...");
+                    console.log("[Tagger] Syncing existing user data...");
                 } else {
-                    console.log("[Tagger] No existing user. Syncing by user IP...");
+                    console.log("[Tagger] No existing user. Syncing user...");
                 }
 
                 await this._syncRemoteData();
@@ -194,8 +200,14 @@ const tagger = {
             this.storeData("userCreateTime", currentTime);
             this.storeData("updatedTime", currentTime);
 
+            // Set timestamp in global scope
+            this.setUserParam("timestamp", currentTime, false);
+
             console.log("[Tagger] UserID Created");
             this.triggerEvent(window, "tagger:userIDCreated", [userID]);
+
+            // SYNC with remote after creating new user
+            this._syncRemoteData();
         }
         return userID;
     },
@@ -310,14 +322,20 @@ const tagger = {
      * Sets a specific user parameter in the tagger storage.
      * @param {string} param - The parameter to set.
      * @param {string} value - The value to set.
+     * @param {boolean} [sync=true] - Whether to sync the data with the remote endpoint.
      * @returns {object} - The updated user parameters.
      */
-    setUserParam: function (param, value) {
+    setUserParam: function (param, value, sync = true) {
         let userParams = this.getUserParams();
         userParams[param] = value;
 
         this.storeData("userParams", userParams);
         this.storeData("updatedTime", new Date().getTime());
+
+        // Sync with remote if needed
+        if (sync) {
+            this._syncRemoteData();
+        }
 
         window.taggerUserParams = userParams;
     },
@@ -333,6 +351,12 @@ const tagger = {
      * @returns {any} - The stored data.
      */
     storeData: function (key, value) {
+        // We can't store data while a sync operation is in progress
+        if (this.SYNC_LOCK) {
+            console.warn("[Tagger] Can't store data while a sync operation is in progress.");
+            return null;
+        }
+
         key = "__tg-" + key;
         try {
             const json = JSON.stringify(value);
@@ -368,7 +392,7 @@ const tagger = {
                     const json = decodeURIComponent(atob(value));
                     const parsed = JSON.parse(json);
 
-                    if (parsed && (typeof parsed === "object" || typeof parsed === "string")) {
+                    if (parsed && (typeof parsed === "object" || typeof parsed === "string" || typeof parsed === "number")) {
                         return parsed;
                     }
                 } catch (e) {
@@ -398,11 +422,18 @@ const tagger = {
             return;
         }
 
+        if (this.SYNC_LOCK) {
+            console.warn("[Tagger] Sync operation already in progress.");
+            return;
+        } else {
+            this.SYNC_LOCK = true;
+        }
+
         const endpoint = window.taggerConfig.remoteEndpoint;
         const localData = this._getSyncableData();
         const hasLocalData = Object.keys(localData).length >= 2; // Check for more than just IP and updatedTime/timestamp
 
-        const ip = await this.utilGetUserIp();
+        console.log("[Tagger] Local data available for sync:", localData);
 
         try {
             // Determine sync action
@@ -421,7 +452,7 @@ const tagger = {
 
             if (action === "POST") {
                 // POST: Send local data to remote server
-                const payload = this._prepareRemotePayload(ip, localData);
+                const payload = this._prepareRemotePayload(localData);
                 const response = await fetch(finalEndpoint, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -434,26 +465,33 @@ const tagger = {
                         // Successfully updated remote, no local change expected unless server returns new data
                         console.log("[Tagger] Remote data updated.");
                     } else {
-                        // Server might return newer data on POST if it received a race condition update
-                        if (responseData.data && this.isRemoteDataNewer(responseData.data)) {
-                            this._applyRemoteData(responseData.data);
+                        // Server data was not updated, check if it returned new data
+                        if (responseData.data) {
+                            // Apply returned data if it's newer
+                            const decodedData = this._decodeRemoteData(responseData.data);
+                            if (decodedData && this.isRemoteDataNewer(decodedData)) {
+                                this.SYNC_LOCK = false; // Unlock before applying data
+                                this._applyRemoteData(decodedData);
+                                console.log("[Tagger] Remote data was newer, received and applied.");
+                            }
+                        } else {
+                            console.warn("[Tagger] No remote data available.");
                         }
                     }
                 } else {
                     console.error("[Tagger] Remote sync POST failed:", response.statusText);
                 }
+
+                this.SYNC_LOCK = false;
+
                 return;
             } else {
                 // GET_FULL / GET_CHECK: Retrieve data or check for updates
-                // Encode IP and optional local timestamp for server
-                const encodedIP = btoa(ip);
-                finalEndpoint += `?ip=${encodedIP}`;
-
                 if (action === "GET_CHECK") {
                     // Check only, include local timestamp
                     const localUpdatedTime = localData.updatedTime || localData.userParams?.timestamp || 0;
                     if (localUpdatedTime) {
-                        finalEndpoint += `&updatedTime=${localUpdatedTime}`;
+                        finalEndpoint = endpoint.includes("?") ? `${endpoint}&updatedTime=${localUpdatedTime}` : `${endpoint}?updatedTime=${localUpdatedTime}`;
                     }
                 }
 
@@ -465,7 +503,9 @@ const tagger = {
                     if (responseData.data) {
                         // Response contains base64 encoded data
                         const decodedData = this._decodeRemoteData(responseData.data);
+                        console.log("[Tagger] Remote data received:", decodedData);
                         if (decodedData && this.isRemoteDataNewer(decodedData)) {
+                            this.SYNC_LOCK = false; // Unlock before applying data
                             this._applyRemoteData(decodedData);
                         } else {
                             console.log("[Tagger] Remote data is not newer or is invalid.");
@@ -484,18 +524,19 @@ const tagger = {
         } catch (error) {
             console.error("[Tagger] Remote sync communication error: ", error);
         }
+
+        console.log("[Tagger] Sync process completed.");
+        this.SYNC_LOCK = false;
     },
 
     /**
      * Prepares the data to be sent to the remote endpoint.
-     * @param {string} ip - The user's IP address.
      * @param {object} localData - The local Tagger data.
      * @returns {object} - The payload for the remote server.
      */
-    _prepareRemotePayload: function (ip, localData) {
+    _prepareRemotePayload: function (localData) {
         const data = {
             ...localData,
-            ip: ip,
             userAgent: navigator.userAgent,
             referer: document.referrer,
         };
@@ -513,12 +554,14 @@ const tagger = {
         const userID = this.getData("userID");
         const userParams = this.getData("userParams");
         const userCreateTime = this.getData("userCreateTime");
-        const updatedTime = this.getData("updatedTime"); // New tracking key
+        const updatedTime = this.getData("updatedTime");
 
         if (userID) data.userID = userID;
         if (userParams) data.userParams = userParams;
         if (userCreateTime) data.userCreateTime = userCreateTime;
         if (updatedTime) data.updatedTime = updatedTime;
+
+        console.log("[Tagger] Syncable data:", data);
 
         return data;
     },
@@ -541,6 +584,7 @@ const tagger = {
      */
     isRemoteDataNewer: function (remoteData) {
         const localTime = this.getData("updatedTime") || this.getData("userParams")?.timestamp || 0;
+        // console.log("[Tagger] Comparing remote time with local time:", remoteData.updatedTime, localTime);
         const remoteTime = remoteData.updatedTime || remoteData.userParams?.timestamp || 0;
         // Only consider it newer if it's strictly greater (and not equal, to avoid ping-pong)
         return remoteTime > localTime;
@@ -565,7 +609,12 @@ const tagger = {
      * Applies the received remote data to local Tagger storage.
      * @param {object} data - The decoded data from the remote server.
      */
-    _applyRemoteData: function (data) {
+    _applyRemoteData: function (data, by) {
+        if (this.SYNC_LOCK) {
+            console.warn("[Tagger] Sync operation already in progress.");
+            return;
+        }
+
         if (data.userID) {
             this.storeData("userID", data.userID);
             window.taggerUserID = data.userID; // Update global scope
@@ -577,6 +626,7 @@ const tagger = {
         }
         if (data.userCreateTime) this.storeData("userCreateTime", data.userCreateTime);
         if (data.updatedTime) this.storeData("updatedTime", data.updatedTime); // Store the remote updated time
+        if (data.updatedTime) this.storeData("remoteUpdatedTime", data.updatedTime); // Store the remote updated time
 
         console.log("[Tagger] Remote data applied.");
         this.triggerEvent(window, "tagger:remoteSyncApplied");
