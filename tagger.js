@@ -843,7 +843,7 @@ const tagger = {
         const decodedUrl = decodeURIComponent(url).trim();
 
         // Define allowed protocols in lowercase
-        const allowedProtocols = ["http:", "https:", "ftp:", "mailto:", "tel:", "#", "/"];
+        const allowedProtocols = ["http:", "https:", "tel:", "#", "/"];
 
         // Check for relative path or allowed protocol
         if (decodedUrl.startsWith("/") || allowedProtocols.some((p) => decodedUrl.toLowerCase().startsWith(p))) {
