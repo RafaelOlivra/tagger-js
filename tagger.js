@@ -475,7 +475,7 @@ const tagger = {
 
                         // Successfully updated remote, no local change expected unless server returns new data
                         this.storeData("remoteUpdatedTime", responseData.updatedTime || 0);
-                        console.log("[Tagger] Remote data updated.");
+                        console.log("[Tagger] Synced remote data.");
                     } else {
                         // Server data was not updated, check if it returned new data
                         if (responseData.data) {
@@ -485,7 +485,7 @@ const tagger = {
                             const decodedData = this._decodeRemoteData(responseData.data);
                             if (decodedData && this.isRemoteDataNewer(decodedData)) {
                                 this._applyRemoteData(decodedData);
-                                console.log("[Tagger] Remote data was newer, received and applied.");
+                                console.log("[Tagger] Synced remote data.");
                             } else {
                                 // Update local remoteUpdatedTime to avoid re-sending
                                 this.storeData("remoteUpdatedTime", responseData.updatedTime || 0);
@@ -647,7 +647,7 @@ const tagger = {
         if (data.updatedTime) this.storeData("updatedTime", data.updatedTime); // Store the remote updated time
         if (data.updatedTime) this.storeData("remoteUpdatedTime", data.updatedTime); // Store the remote updated time
 
-        console.log("[Tagger] Remote data applied.");
+        // console.log("[Tagger] Remote data applied.");
         this.triggerEvent(window, "tagger:remoteSyncApplied");
     },
     /**
