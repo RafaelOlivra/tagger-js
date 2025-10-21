@@ -2,6 +2,7 @@
   "name": "tagger",
   "version": "1.2.8",
   "scripts": {
-    "build": "npx terser tagger.js -o tagger.min.js --config-file terser.config.json"
+    "build": "npx terser tagger.js -o tagger.min.js --config-file terser.config.json",
+    "watch": "npx --package chokidar-cli chokidar 'tagger.js' -c 'npm run build'"
   }
 }
