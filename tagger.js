@@ -518,7 +518,7 @@ const tagger = {
                     if (responseData.data) {
                         // Response contains base64 encoded data
                         const decodedData = this._decodeRemoteData(responseData.data);
-                        console.log("[Tagger] Remote data received.");
+                        console.log("[Tagger] Synced remote data.");
                         if (decodedData && this.isRemoteDataNewer(decodedData)) {
                             this.unlock(); // Unlock before applying data
                             this._applyRemoteData(decodedData);
