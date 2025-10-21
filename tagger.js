@@ -1,6 +1,6 @@
 /**
  * Tagger - Simple user tagging
- * @version 1.2.8
+ * @version 1.3.1
  * @namespace tagger
  */
 
@@ -77,6 +77,7 @@ const tagger = {
         }
 
         console.log("[Tagger] Ready!");
+        window.taggerReady = true;
     },
 
     //-----------------------------
@@ -176,8 +177,7 @@ const tagger = {
      * @returns {boolean} - Returns true if a user ID exists, false otherwise.
      */
     userExists: async function () {
-        const userID = await this._retrieveUserID(false);
-        return !!userID;
+        return (await this._retrieveUserID(false)) !== null;
     },
 
     /**
@@ -361,7 +361,7 @@ const tagger = {
      */
     storeData: function (key, value) {
         // We can't store data while a sync operation is in progress
-        if (this.SYNC_LOCK) {
+        if (this.isLocked()) {
             console.warn("[Tagger] Can't store data while a sync operation is in progress.");
             return null;
         }
@@ -431,11 +431,11 @@ const tagger = {
             return;
         }
 
-        if (this.SYNC_LOCK) {
+        if (this.isLocked()) {
             console.warn("[Tagger] Sync operation already in progress.");
             return;
         } else {
-            this.SYNC_LOCK = true;
+            this.lock();
         }
 
         const endpoint = window.taggerConfig.remoteEndpoint;
@@ -453,7 +453,7 @@ const tagger = {
                 action = "GET_CHECK";
             }
 
-            console.log(`[Tagger] Remote sync action: ${action}`);
+            // console.log(`[Tagger] Remote sync action: ${action}`);
 
             // Execute sync action
             let responseData = null;
@@ -471,17 +471,24 @@ const tagger = {
                 if (response.ok) {
                     responseData = await response.json();
                     if (responseData.updated) {
+                        this.unlock(); // Unlock before applying data
+
                         // Successfully updated remote, no local change expected unless server returns new data
+                        this.storeData("remoteUpdatedTime", responseData.updatedTime || 0);
                         console.log("[Tagger] Remote data updated.");
                     } else {
                         // Server data was not updated, check if it returned new data
                         if (responseData.data) {
+                            this.unlock(); // Unlock before applying data
+
                             // Apply returned data if it's newer
                             const decodedData = this._decodeRemoteData(responseData.data);
                             if (decodedData && this.isRemoteDataNewer(decodedData)) {
-                                this.SYNC_LOCK = false; // Unlock before applying data
                                 this._applyRemoteData(decodedData);
                                 console.log("[Tagger] Remote data was newer, received and applied.");
+                            } else {
+                                // Update local remoteUpdatedTime to avoid re-sending
+                                this.storeData("remoteUpdatedTime", responseData.updatedTime || 0);
                             }
                         } else {
                             console.warn("[Tagger] No remote data available.");
@@ -491,8 +498,7 @@ const tagger = {
                     console.error("[Tagger] Remote sync POST failed:", response.statusText);
                 }
 
-                this.SYNC_LOCK = false;
-
+                this.unlock();
                 return;
             } else {
                 // GET_FULL / GET_CHECK: Retrieve data or check for updates
@@ -512,18 +518,22 @@ const tagger = {
                     if (responseData.data) {
                         // Response contains base64 encoded data
                         const decodedData = this._decodeRemoteData(responseData.data);
-                        console.log("[Tagger] Remote data received:", decodedData);
+                        console.log("[Tagger] Remote data received.");
                         if (decodedData && this.isRemoteDataNewer(decodedData)) {
-                            this.SYNC_LOCK = false; // Unlock before applying data
+                            this.unlock(); // Unlock before applying data
                             this._applyRemoteData(decodedData);
                         } else {
                             console.log("[Tagger] Remote data is not newer or is invalid.");
                         }
                     } else if (responseData.updated === false) {
-                        // GET_CHECK response: local data is newer or same as remote
-                        // Force an update to the server (POST request) to ensure sync
+                        // If action was GET_CHECK and local data is newer, re-sync
                         if (action === "GET_CHECK") {
-                            await this._syncRemoteData(true);
+                            const localUpdatedTime = localData.updatedTime || localData.userParams?.timestamp || 0;
+                            const remoteUpdatedTime = responseData.updatedTime || 0;
+                            if (localUpdatedTime > remoteUpdatedTime) {
+                                this.unlock(); // Unlock before re-calling
+                                await this._syncRemoteData(true);
+                            }
                         }
                     }
                 } else {
@@ -534,8 +544,8 @@ const tagger = {
             console.error("[Tagger] Remote sync communication error: ", error);
         }
 
-        console.log("[Tagger] Sync process completed.");
-        this.SYNC_LOCK = false;
+        // console.log("[Tagger] Sync process completed.");
+        this.unlock();
     },
 
     /**
@@ -583,6 +593,7 @@ const tagger = {
     isLocalDataNewer: function (localData) {
         const localTime = localData.updatedTime || localData.userParams?.timestamp || 0;
         const remoteUpdateTime = this.getData("remoteUpdatedTime") || 0;
+        // console.log("[Tagger] Comparing local time with remote time:", localTime, remoteUpdateTime);
         return localTime > remoteUpdateTime;
     },
 
@@ -593,7 +604,6 @@ const tagger = {
      */
     isRemoteDataNewer: function (remoteData) {
         const localTime = this.getData("updatedTime") || this.getData("userParams")?.timestamp || 0;
-        // console.log("[Tagger] Comparing remote time with local time:", remoteData.updatedTime, localTime);
         const remoteTime = remoteData.updatedTime || remoteData.userParams?.timestamp || 0;
         // Only consider it newer if it's strictly greater (and not equal, to avoid ping-pong)
         return remoteTime > localTime;
@@ -619,7 +629,7 @@ const tagger = {
      * @param {object} data - The decoded data from the remote server.
      */
     _applyRemoteData: function (data, by) {
-        if (this.SYNC_LOCK) {
+        if (this.isLocked()) {
             console.warn("[Tagger] Sync operation already in progress.");
             return;
         }
@@ -639,6 +649,25 @@ const tagger = {
 
         console.log("[Tagger] Remote data applied.");
         this.triggerEvent(window, "tagger:remoteSyncApplied");
+    },
+    /**
+     * Checks if the Tagger storage is currently locked for sync operations.
+     * @returns {boolean} - Returns true if the storage is locked, false otherwise.
+     */
+    isLocked: function () {
+        return this.SYNC_LOCK;
+    },
+    /**
+     * Locks the Tagger storage to prevent concurrent sync operations.
+     */
+    lock: function () {
+        this.SYNC_LOCK = true;
+    },
+    /**
+     * Unlocks the Tagger storage to allow sync operations.
+     */
+    unlock: function () {
+        this.SYNC_LOCK = false;
     },
 
     //-----------------------------
@@ -695,6 +724,7 @@ const tagger = {
 
         console.log("[Tagger] Reloaded");
         this.triggerEvent(window, "tagger:reload");
+        window.taggerReady = true;
     },
     /**
      * Add the current URL parameters to the specified URL and appends the userID.
@@ -807,15 +837,24 @@ const tagger = {
      * @returns {string} - The sanitized URL.
      */
     utilSanitizeURL: function (url) {
-        if (!url) return url;
+        if (!url) return "";
 
-        // Remove any script tags
-        url = url.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
-        // Remove any potentially dangerous characters or sequences
-        url = url.replace(/[\\"'<>(){}]/g, "");
-        url = url.trim();
+        // Decode potential encoded malicious inputs (e.g., to catch 'jav\tascript:...')
+        const decodedUrl = decodeURIComponent(url).trim();
 
-        return url;
+        // Define allowed protocols in lowercase
+        const allowedProtocols = ["http:", "https:", "ftp:", "mailto:", "tel:", "#", "/"];
+
+        // Check for relative path or allowed protocol
+        if (decodedUrl.startsWith("/") || allowedProtocols.some((p) => decodedUrl.toLowerCase().startsWith(p))) {
+            // If it starts with an allowed protocol or is a relative path, it's safe.
+            // We'll return the original (non-decoded) URL to preserve its intended encoding.
+            return url;
+        }
+
+        // If not safe, return '#' or throw an error. Returning '#' prevents the link from working.
+        console.warn("[Tagger] Blocked unsafe URL protocol:", url);
+        return "#";
     },
 
     /**
