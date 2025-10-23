@@ -427,7 +427,15 @@ const tagger = {
      * IP source, User Agent, and Referer to prevent abuse or unauthorized data storage.
      */
     _syncRemoteData: async function (forceUpdate = false) {
-        if (!window?.taggerConfig?.remoteSync || !window.taggerConfig.remoteEndpoint) {
+        if (!window?.taggerConfig?.remoteSync || !window?.taggerConfig?.remoteEndpoint) {
+            return;
+        }
+
+        const endpoint = window?.taggerConfig?.remoteEndpoint;
+
+        // Endpoint should always be HTTPS
+        if (!endpoint?.startsWith("https://")) {
+            console.error("[Tagger] Remote endpoint must be HTTPS.");
             return;
         }
 
@@ -438,7 +446,6 @@ const tagger = {
             this.lock();
         }
 
-        const endpoint = window.taggerConfig.remoteEndpoint;
         const localData = this._getSyncableData();
         const hasLocalData = Object.keys(localData).length >= 2; // Check for more than just IP and updatedTime/timestamp
 
