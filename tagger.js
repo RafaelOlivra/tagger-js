@@ -271,7 +271,7 @@ const tagger = {
         }
 
         // Initialize if not found
-        if (!storedParams || typeof storedParams !== "object") {
+        if (!storedParams || typeof storedParams !== "object" || Array.isArray(storedParams)) {
             storedParams = {};
         }
 
@@ -343,6 +343,9 @@ const tagger = {
      */
     setUserParam: function (param, value, sync = true) {
         let userParams = this.getUserParams();
+        if (!userParams || typeof userParams !== "object" || Array.isArray(userParams)) {
+            userParams = {};
+        }
         userParams[param] = value;
 
         this.storeData("userParams", userParams);
@@ -375,7 +378,14 @@ const tagger = {
 
         key = "__tg-" + key;
         try {
+            // console.log("[Tagger] Storing data for key:", key, value);
             const json = JSON.stringify(value);
+
+            if (!json) {
+                console.error("[Tagger] Unable to stringify value for key:", key, value);
+                return null;
+            }
+
             const base64 = btoa(encodeURIComponent(json)); // Safer for UTF-8
 
             this.utilSetCookie(key, base64, 365);
