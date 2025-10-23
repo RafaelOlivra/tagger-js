@@ -339,13 +339,18 @@ const tagger = {
      * @param {string} param - The parameter to set.
      * @param {string} value - The value to set.
      * @param {boolean} [sync=true] - Whether to sync the data with the remote endpoint.
-     * @returns {object} - The updated user parameters.
+     * @returns {object} - True if the parameter was set, false otherwise.
      */
     setUserParam: function (param, value, sync = true) {
         let userParams = this.getUserParams();
         if (!userParams || typeof userParams !== "object" || Array.isArray(userParams)) {
             userParams = {};
         }
+        const oldValue = userParams[param];
+        if (oldValue === value) {
+            return false;
+        }
+
         userParams[param] = value;
 
         this.storeData("userParams", userParams);
@@ -357,6 +362,7 @@ const tagger = {
         }
 
         window.taggerUserParams = userParams;
+        return true;
     },
 
     //-----------------------------
@@ -581,10 +587,9 @@ const tagger = {
         const data = {
             ...localData,
             userAgent: navigator.userAgent,
-            referer: document.referrer,
         };
         const json = JSON.stringify(data);
-        const base64 = btoa(encodeURIComponent(json));
+        const base64 = btoa(json);
         return { data: base64 };
     },
 
@@ -640,7 +645,7 @@ const tagger = {
      */
     _decodeRemoteData: function (base64Data) {
         try {
-            const json = decodeURIComponent(atob(base64Data));
+            const json = atob(base64Data);
             return JSON.parse(json);
         } catch (e) {
             console.error("[Tagger] Error decoding or parsing remote data: ", e);
