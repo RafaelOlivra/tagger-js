@@ -60,12 +60,19 @@ const tagger = {
         window.taggerUserParams = this.getUserParams();
 
         // Wait for document ready
-        document.addEventListener("DOMContentLoaded", async () => {
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", async () => {
+                setTimeout(async () => {
+                    this.triggerEvent(window, "tagger:init", [userID]);
+                    await this.reload();
+                }, 100);
+            });
+        } else {
             setTimeout(async () => {
                 this.triggerEvent(window, "tagger:init", [userID]);
                 await this.reload();
             }, 100);
-        });
+        }
 
         // Set auto sync interval if enabled
         const autoSyncInterval = window?.taggerConfig?.autoSyncInterval ?? 0;
