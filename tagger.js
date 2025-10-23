@@ -555,7 +555,7 @@ const tagger = {
                         } else {
                             console.log("[Tagger] Remote data is not newer or is invalid.");
                         }
-                    } else if (responseData.updated === false) {
+                    } else if (!responseData.updated) {
                         // If action was GET_CHECK and local data is newer, re-sync
                         if (action === "GET_CHECK") {
                             const localUpdatedTime = localData.updatedTime || localData.userParams?.timestamp || 0;
