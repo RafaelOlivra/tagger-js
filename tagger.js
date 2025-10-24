@@ -21,6 +21,12 @@ const tagger = {
     mainCallback: null,
 
     /**
+     * Cached user IP address.
+     * @type {string|null}
+     */
+    cachedIP: null,
+
+    /**
      * Initializes the Tagger module.
      * Binds events and triggers the reload function.
      * @returns {Promise<void>}
@@ -503,7 +509,7 @@ const tagger = {
 
             if (action === "POST") {
                 // POST: Send local data to remote server
-                const payload = this._prepareRemotePayload(localData);
+                const payload = await this._prepareRemotePayload(localData);
                 const response = await fetch(finalEndpoint, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -548,11 +554,12 @@ const tagger = {
                     // Check only, include local timestamp
                     const localUpdatedTime = localData.updatedTime || localData.userParams?.timestamp || 0;
                     if (localUpdatedTime) {
-                        finalEndpoint = endpoint.includes("?") ? `${endpoint}&updatedTime=${localUpdatedTime}` : `${endpoint}?updatedTime=${localUpdatedTime}`;
+                        finalEndpoint = this.utilAppendURLParam(finalEndpoint, "updatedTime", localUpdatedTime);
                     }
                 }
 
-                const response = await fetch(finalEndpoint, { method: "GET" });
+                const userIP = await this.utilGetUserIp();
+                const response = await fetch(this.utilAppendURLParam(finalEndpoint, "ip", userIP), { method: "GET" });
 
                 if (response.ok) {
                     responseData = await response.json();
@@ -595,10 +602,12 @@ const tagger = {
      * @param {object} localData - The local Tagger data.
      * @returns {object} - The payload for the remote server.
      */
-    _prepareRemotePayload: function (localData) {
+    _prepareRemotePayload: async function (localData) {
+        const userIP = await this.utilGetUserIp();
         const data = {
             ...localData,
             userAgent: navigator.userAgent,
+            userIP,
         };
         const json = JSON.stringify(data);
         const base64 = btoa(json);
@@ -767,6 +776,25 @@ const tagger = {
         this.triggerEvent(window, "tagger:reload");
         window.taggerReady = true;
     },
+
+    /**
+     * Appends a parameter to the specified URL.
+     * @param {string} url - The URL to append the parameter to.
+     * @param {string} param - The parameter name.
+     * @param {string} value - The parameter value.
+     * @returns {string} - The new URL with the appended parameter.
+     */
+    utilAppendURLParam: function (url, param, value) {
+        try {
+            let newURL = new URL(url, window.location.href);
+            newURL.searchParams.append(param, value);
+            return newURL.href;
+        } catch (error) {
+            console.error("[Tagger] Error appending URL param: ", error);
+            return url;
+        }
+    },
+
     /**
      * Add the current URL parameters to the specified URL and appends the userID.
      * @param {string} url - The URL to move the parameters from.
@@ -808,26 +836,69 @@ const tagger = {
 
     /**
      * Retrieves the user's IP address.
+     * Try multiple services for redundancy.
+     * @param {boolean} [forceIPv4=true] - Whether to force IPv4 retrieval.
      * @returns {Promise<string>} - The user's IP address.
      */
-    utilGetUserIp: async function () {
+    utilGetUserIp: async function (forceIPv4 = false) {
+        forceIPv4 = forceIPv4 ? true : window?.taggerConfig?.forceIPv4 ?? false;
+
+        if (this.cachedIP) return this.cachedIP;
+
+        // Try to get it from the storage first
+        let storedIP = this.getData("userIP");
+        let ipUpdatedTime = this.getData("userIPUpdatedTime") || 0;
+        const ipCacheDuration = window?.taggerConfig?.ipCacheDuration ?? 86400000; // Default 24 hours
+
+        if (storedIP && this.utilValidateIp(storedIP) && Date.now() - ipUpdatedTime < ipCacheDuration) {
+            this.cachedIP = storedIP;
+            return storedIP;
+        }
+
+        const updateCachedIP = (ip) => {
+            this.cachedIP = ip;
+
+            // Store it after a short delay to avoid blocking
+            // Waiting in here is fine as this is not a critical path
+            setTimeout(() => {
+                this.storeData("userIP", ip);
+                this.storeData("userIPUpdatedTime", Date.now());
+            }, 1000);
+        };
+
         try {
+            const url = forceIPv4 ? "https://api4.ipify.org/?format=json" : "https://api.ipify.org?format=json";
             // Try with IPify first
-            const ipifyResponse = await fetch("https://api.ipify.org?format=json");
-            if (ipifyResponse.ok) {
-                const data = await ipifyResponse.json();
+            const response = await fetch(url);
+            if (response.ok) {
+                const data = await response.json();
                 if (this.utilValidateIp(data.ip)) {
+                    updateCachedIP(data.ip);
                     return data.ip;
                 }
             }
         } catch (error) {
             try {
-                // Fallback to IPinfo if IPify fails
-                const ipinfoResponse = await fetch("https://ipinfo.io/json");
-                if (ipinfoResponse.ok) {
-                    const data = await ipinfoResponse.json();
-                    if (this.utilValidateIp(data.ip)) {
-                        return data.ip;
+                if (!forceIPv4) {
+                    // Fallback to IPinfo if IPify fails
+                    const response = await fetch("https://ipinfo.io/json");
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (this.utilValidateIp(data.ip)) {
+                            updateCachedIP(data.ip);
+                            return data.ip;
+                        }
+                    }
+                } else {
+                    // Fallback to icanhazip
+                    const response = await fetch("https://ipv4.icanhazip.com/");
+                    if (response.ok) {
+                        const data = await response.text();
+                        const ip = data.trim();
+                        if (this.utilValidateIp(ip)) {
+                            updateCachedIP(ip);
+                            return ip;
+                        }
                     }
                 }
             } catch (error) {
