@@ -250,9 +250,10 @@ const tagger = {
 
     /**
      * Returns the stored user parameters from the tagger storage or URL.
+     * @param {boolean} [sync=true] - Whether to sync extracted data with the remote endpoint.
      * @returns {object} - The user parameters.
      */
-    getUserParams: function () {
+    getUserParams: function (sync = true) {
         // Get the external parameters
         let params = new URLSearchParams(window.location.search);
         let userParams = window?.taggerConfig?.userParams ?? ["utm_source", "utm_medium", "utm_campaign", "utm_term", "gclid", "gbraid", "fbclid", "ref"];
@@ -270,7 +271,7 @@ const tagger = {
             storedParams = this.getData("userURLParams");
         }
 
-        // Initialize if not found
+        // Initialize if nothing found
         if (!storedParams || typeof storedParams !== "object" || Array.isArray(storedParams)) {
             storedParams = {};
         }
@@ -320,6 +321,11 @@ const tagger = {
         if (updated) {
             this.storeData("userParams", storedParams);
             this.storeData("updatedTime", new Date().getTime());
+
+            // Sync with remote if needed
+            if (sync) {
+                this._syncRemoteData();
+            }
         }
 
         return storedParams;
