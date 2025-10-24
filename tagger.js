@@ -449,6 +449,13 @@ const tagger = {
     // Remote Sync functions
     //-----------------------------
     /**
+     * Public method to trigger synchronization of Tagger data with the remote endpoint.
+     */
+    sync: async function () {
+        await this._syncRemoteData();
+    },
+
+    /**
      * Synchronizes Tagger data (userParams, userID, userCreateTime) with a remote endpoint.
      * @param {boolean} [forceUpdate=false] - Forces a POST request to update the remote server.
      * @returns {Promise<void>}
