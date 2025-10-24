@@ -216,9 +216,6 @@ const tagger = {
             this.storeData("userCreateTime", currentTime);
             this.storeData("updatedTime", currentTime);
 
-            // Set timestamp in global scope
-            this.setUserParam("timestamp", currentTime, false);
-
             console.log("[Tagger] UserID Created");
             this.triggerEvent(window, "tagger:userIDCreated", [userID]);
 
@@ -285,12 +282,6 @@ const tagger = {
                 updated = true;
             }
         });
-
-        // Store timestamp
-        if (!storedParams["timestamp"]) {
-            storedParams["timestamp"] = new Date().getTime();
-            updated = true;
-        }
 
         // Params can also be stored individually in a cookie
         // Using the __tg-param-{{NAME}} format. So we need to read all
@@ -463,11 +454,14 @@ const tagger = {
      * IP source, User Agent, and Referer to prevent abuse or unauthorized data storage.
      */
     _syncRemoteData: async function (forceUpdate = false) {
-        if (!window?.taggerConfig?.remoteSync || !window?.taggerConfig?.remoteEndpoint) {
+        const taggerConfig = window?.taggerConfig;
+
+        if (!taggerConfig?.remoteSync || !taggerConfig?.remoteEndpoint) {
             return;
         }
 
-        const endpoint = window?.taggerConfig?.remoteEndpoint;
+        const endpoint = taggerConfig.remoteEndpoint;
+        const syncEmptyParams = taggerConfig?.remoteSyncEmptyParams ?? false;
 
         // Endpoint should always be HTTPS
         if (!endpoint?.startsWith("https://")) {
@@ -483,9 +477,14 @@ const tagger = {
         }
 
         const localData = this._getSyncableData();
-        const hasLocalData = Object.keys(localData).length >= 2; // Check for more than just IP and updatedTime/timestamp
+        const hasLocalData = Object.keys(localData).length >= 2; // We need at least userID and one more data point
 
-        // console.log("[Tagger] Local data available for sync:", localData);
+        // If remoteSyncEmptyParams is false, we must have at least one data point to sync
+        if (hasLocalData && !syncEmptyParams && !localData?.userParams) {
+            console.info("[Tagger] No user params to sync.");
+            this.unlock();
+            return;
+        }
 
         try {
             // Determine sync action
