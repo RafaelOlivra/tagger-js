@@ -259,7 +259,7 @@ const tagger = {
     getUserParams: function (sync = true) {
         // Get the external parameters
         let params = new URLSearchParams(window.location.search);
-        let userParams = window?.taggerConfig?.userParams ?? ["utm_source", "utm_medium", "utm_campaign", "utm_term", "gclid", "gbraid", "fbclid", "ref"];
+        let userParams = window?.taggerConfig?.userParams ?? ["utm_source", "utm_medium", "utm_campaign", "utm_term", "gclid", "gbraid", "fbclid"];
 
         // Fallback for older versions
         if (!userParams && window?.taggerConfig?.userURLParams) {
