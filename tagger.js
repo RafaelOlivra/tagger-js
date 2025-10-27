@@ -217,10 +217,12 @@ const tagger = {
             const prefix = window?.taggerConfig?.prefix ?? "tg-";
             const currentTime = new Date().getTime();
             userID = await this.createNewUserID(prefix);
+            const referrer = this.getUserReferrer(true);
 
             this.storeData("userID", userID);
             this.storeData("userCreateTime", currentTime);
             this.storeData("updatedTime", currentTime);
+            this.storeData("userReferrer", referrer);
 
             console.log("[Tagger] UserID Created");
             this.triggerEvent(window, "tagger:userIDCreated", [userID]);
@@ -606,7 +608,8 @@ const tagger = {
         const userIP = await this.utilGetUserIp();
         const data = {
             ...localData,
-            userAgent: navigator.userAgent,
+            userAgent: this.getUserAgent(),
+            userReferrer: this.getUserReferrer(),
             userIP,
         };
         const json = JSON.stringify(data);
@@ -624,6 +627,8 @@ const tagger = {
         const userParams = this.getData("userParams");
         const userCreateTime = this.getData("userCreateTime");
         const updatedTime = this.getData("updatedTime");
+
+        // userReferrer and userAgent are handled separately during sync send
 
         if (userID) data.userID = userID;
         if (userParams) data.userParams = userParams;
@@ -697,6 +702,9 @@ const tagger = {
         if (data.updatedTime) this.storeData("updatedTime", data.updatedTime); // Store the remote updated time
         if (data.updatedTime) this.storeData("remoteUpdatedTime", data.updatedTime); // Store the remote updated time
 
+        // userReferrer can also be received
+        if (data.userReferrer) this.storeData("userReferrer", data.userReferrer);
+
         // console.log("[Tagger] Remote data applied.");
         this.triggerEvent(window, "tagger:remoteSyncApplied");
     },
@@ -729,6 +737,50 @@ const tagger = {
      */
     getInstance: function () {
         return this;
+    },
+
+    /**
+     * Retrieves the user's document referrer.
+     * @param {boolean} [refresh=false] - Whether to refresh the referrer from the document.
+     * @returns {string} - The document referrer.
+     */
+    getUserReferrer: function (refresh = false) {
+        // Try to get referrer from user data first
+        if (!refresh) {
+            const storedReferrer = this.getData("userReferrer");
+            if (storedReferrer) return storedReferrer;
+        }
+
+        const referrer = document.referrer;
+        this.storeData("userReferrer", referrer);
+
+        return referrer || "";
+    },
+
+    /**
+     * Sets the user's document referrer.
+     * @param {string} referrer - The document referrer to set.
+     */
+    setUserReferrer: function (referrer) {
+        this.storeData("userReferrer", referrer);
+    },
+
+    /**
+     * Retrieves the user's user agent.
+     * @param {boolean} [refresh=false] - Whether to refresh the user agent from the navigator.
+     * @returns {string} - The user agent.
+     */
+    getUserAgent: function (refresh = false) {
+        // Try to get user agent from user data first
+        if (!refresh) {
+            const storedUserAgent = this.getData("userAgent");
+            if (storedUserAgent) return storedUserAgent;
+        }
+
+        const userAgent = navigator.userAgent;
+        this.storeData("userAgent", userAgent);
+
+        return userAgent || "";
     },
 
     /**
