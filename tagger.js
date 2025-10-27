@@ -40,7 +40,9 @@ const tagger = {
 
         // Check if remoteSync is enabled
         let userExists = await this.userExists();
-        const remoteSyncEnabled = window?.taggerConfig?.remoteSync && window?.taggerConfig?.remoteEndpoint;
+        const remoteSyncEnabled =
+            window?.taggerConfig?.remoteSync &&
+            window?.taggerConfig?.remoteEndpoint;
         if (remoteSyncEnabled) {
             try {
                 if (userExists) {
@@ -51,7 +53,10 @@ const tagger = {
 
                 await this._syncRemoteData();
             } catch (error) {
-                console.error("[Tagger] Remote sync error during init: ", error);
+                console.error(
+                    "[Tagger] Remote sync error during init: ",
+                    error
+                );
                 console.log("[Tagger] Proceeding with local data only.");
             }
         }
@@ -83,7 +88,9 @@ const tagger = {
         // Set auto sync interval if enabled
         const autoSyncInterval = window?.taggerConfig?.autoSyncInterval ?? 0;
         if (autoSyncInterval > 0) {
-            console.log(`[Tagger] Auto sync enabled every ${autoSyncInterval} ms.`);
+            console.log(
+                `[Tagger] Auto sync enabled every ${autoSyncInterval} ms.`
+            );
             setInterval(async () => {
                 await this._syncRemoteData();
             }, autoSyncInterval);
@@ -148,7 +155,7 @@ const tagger = {
                     await that.reload();
                 }, 100);
             },
-            { once: true },
+            { once: true }
         );
     },
 
@@ -261,7 +268,15 @@ const tagger = {
     getUserParams: function (sync = true) {
         // Get the external parameters
         let params = new URLSearchParams(window.location.search);
-        let userParams = window?.taggerConfig?.userParams ?? ["utm_source", "utm_medium", "utm_campaign", "utm_term", "gclid", "gbraid", "fbclid"];
+        let userParams = window?.taggerConfig?.userParams ?? [
+            "utm_source",
+            "utm_medium",
+            "utm_campaign",
+            "utm_term",
+            "gclid",
+            "gbraid",
+            "fbclid",
+        ];
 
         // Fallback for older versions
         if (!userParams && window?.taggerConfig?.userURLParams) {
@@ -277,7 +292,11 @@ const tagger = {
         }
 
         // Initialize if nothing found
-        if (!storedParams || typeof storedParams !== "object" || Array.isArray(storedParams)) {
+        if (
+            !storedParams ||
+            typeof storedParams !== "object" ||
+            Array.isArray(storedParams)
+        ) {
             storedParams = {};
         }
 
@@ -348,7 +367,11 @@ const tagger = {
      */
     setUserParam: function (param, value, sync = true) {
         let userParams = this.getUserParams();
-        if (!userParams || typeof userParams !== "object" || Array.isArray(userParams)) {
+        if (
+            !userParams ||
+            typeof userParams !== "object" ||
+            Array.isArray(userParams)
+        ) {
             userParams = {};
         }
         const oldValue = userParams[param];
@@ -383,7 +406,9 @@ const tagger = {
     storeData: function (key, value) {
         // We can't store data while a sync operation is in progress
         if (this.isLocked()) {
-            console.warn("[Tagger] Can't store data while a sync operation is in progress.");
+            console.warn(
+                "[Tagger] Can't store data while a sync operation is in progress."
+            );
             return null;
         }
 
@@ -393,7 +418,11 @@ const tagger = {
             const json = JSON.stringify(value);
 
             if (!json) {
-                console.error("[Tagger] Unable to stringify value for key:", key, value);
+                console.error(
+                    "[Tagger] Unable to stringify value for key:",
+                    key,
+                    value
+                );
                 return null;
             }
 
@@ -429,11 +458,20 @@ const tagger = {
                     const json = decodeURIComponent(atob(value));
                     const parsed = JSON.parse(json);
 
-                    if (parsed && (typeof parsed === "object" || typeof parsed === "string" || typeof parsed === "number")) {
+                    if (
+                        parsed &&
+                        (typeof parsed === "object" ||
+                            typeof parsed === "string" ||
+                            typeof parsed === "number")
+                    ) {
                         return parsed;
                     }
                 } catch (e) {
-                    console.warn("[Tagger] Error decoding or parsing data for key:", key, e);
+                    console.warn(
+                        "[Tagger] Error decoding or parsing data for key:",
+                        key,
+                        e
+                    );
                 }
             }
 
@@ -496,8 +534,12 @@ const tagger = {
 
         try {
             // Determine sync action
-            let action = hasLocalData && !forceUpdate ? "GET_CHECK" : "GET_FULL";
-            if (hasLocalData && (forceUpdate || this.isLocalDataNewer(localData))) {
+            let action =
+                hasLocalData && !forceUpdate ? "GET_CHECK" : "GET_FULL";
+            if (
+                hasLocalData &&
+                (forceUpdate || this.isLocalDataNewer(localData))
+            ) {
                 action = "POST";
             } else if (hasLocalData && !this.isLocalDataNewer(localData)) {
                 action = "GET_CHECK";
@@ -524,7 +566,10 @@ const tagger = {
                         this.unlock(); // Unlock before applying data
 
                         // Successfully updated remote, no local change expected unless server returns new data
-                        this.storeData("remoteUpdatedTime", responseData.updatedTime || 0);
+                        this.storeData(
+                            "remoteUpdatedTime",
+                            responseData.updatedTime || 0
+                        );
                         console.log("[Tagger] Synced remote data.");
                     } else {
                         // Server data was not updated, check if it returned new data
@@ -532,20 +577,31 @@ const tagger = {
                             this.unlock(); // Unlock before applying data
 
                             // Apply returned data if it's newer
-                            const decodedData = this._decodeRemoteData(responseData.data);
-                            if (decodedData && this.isRemoteDataNewer(decodedData)) {
+                            const decodedData = this._decodeRemoteData(
+                                responseData.data
+                            );
+                            if (
+                                decodedData &&
+                                this.isRemoteDataNewer(decodedData)
+                            ) {
                                 this._applyRemoteData(decodedData);
                                 console.log("[Tagger] Synced remote data.");
                             } else {
                                 // Update local remoteUpdatedTime to avoid re-sending
-                                this.storeData("remoteUpdatedTime", responseData.updatedTime || 0);
+                                this.storeData(
+                                    "remoteUpdatedTime",
+                                    responseData.updatedTime || 0
+                                );
                             }
                         } else {
                             console.warn("[Tagger] No remote data available.");
                         }
                     }
                 } else {
-                    console.error("[Tagger] Remote sync POST failed:", response.statusText);
+                    console.error(
+                        "[Tagger] Remote sync POST failed:",
+                        response.statusText
+                    );
                 }
 
                 this.unlock();
@@ -554,33 +610,54 @@ const tagger = {
                 // GET_FULL / GET_CHECK: Retrieve data or check for updates
                 if (action === "GET_CHECK") {
                     // Check only, include local timestamp
-                    const localUpdatedTime = localData.updatedTime || localData.userParams?.timestamp || 0;
+                    const localUpdatedTime =
+                        localData.updatedTime ||
+                        localData.userParams?.timestamp ||
+                        0;
                     if (localUpdatedTime) {
-                        finalEndpoint = this.utilAppendURLParam(finalEndpoint, "updatedTime", localUpdatedTime);
+                        finalEndpoint = this.utilAppendURLParam(
+                            finalEndpoint,
+                            "updatedTime",
+                            localUpdatedTime
+                        );
                     }
                 }
 
                 const userIP = await this.utilGetUserIp();
-                const response = await fetch(this.utilAppendURLParam(finalEndpoint, "ip", userIP), { method: "GET" });
+                const response = await fetch(
+                    this.utilAppendURLParam(finalEndpoint, "ip", userIP),
+                    { method: "GET" }
+                );
 
                 if (response.ok) {
                     responseData = await response.json();
 
                     if (responseData.data) {
                         // Response contains base64 encoded data
-                        const decodedData = this._decodeRemoteData(responseData.data);
-                        if (decodedData && this.isRemoteDataNewer(decodedData)) {
+                        const decodedData = this._decodeRemoteData(
+                            responseData.data
+                        );
+                        if (
+                            decodedData &&
+                            this.isRemoteDataNewer(decodedData)
+                        ) {
                             this.unlock(); // Unlock before applying data
                             this._applyRemoteData(decodedData);
                             console.log("[Tagger] Synced remote data.");
                         } else {
-                            console.log("[Tagger] Remote data is not newer or is invalid.");
+                            console.log(
+                                "[Tagger] Remote data is not newer or is invalid."
+                            );
                         }
                     } else if (!responseData.updated) {
                         // If action was GET_CHECK and local data is newer, re-sync
                         if (action === "GET_CHECK") {
-                            const localUpdatedTime = localData.updatedTime || localData.userParams?.timestamp || 0;
-                            const remoteUpdatedTime = responseData.updatedTime || 0;
+                            const localUpdatedTime =
+                                localData.updatedTime ||
+                                localData.userParams?.timestamp ||
+                                0;
+                            const remoteUpdatedTime =
+                                responseData.updatedTime || 0;
                             if (localUpdatedTime > remoteUpdatedTime) {
                                 this.unlock(); // Unlock before re-calling
                                 await this._syncRemoteData(true);
@@ -588,7 +665,10 @@ const tagger = {
                         }
                     }
                 } else {
-                    console.error("[Tagger] Remote sync GET failed:", response.statusText);
+                    console.error(
+                        "[Tagger] Remote sync GET failed:",
+                        response.statusText
+                    );
                 }
             }
         } catch (error) {
@@ -646,7 +726,8 @@ const tagger = {
      * @returns {boolean}
      */
     isLocalDataNewer: function (localData) {
-        const localTime = localData.updatedTime || localData.userParams?.timestamp || 0;
+        const localTime =
+            localData.updatedTime || localData.userParams?.timestamp || 0;
         const remoteUpdateTime = this.getData("remoteUpdatedTime") || 0;
         // console.log("[Tagger] Comparing local time with remote time:", localTime, remoteUpdateTime);
         return localTime > remoteUpdateTime;
@@ -658,8 +739,12 @@ const tagger = {
      * @returns {boolean}
      */
     isRemoteDataNewer: function (remoteData) {
-        const localTime = this.getData("updatedTime") || this.getData("userParams")?.timestamp || 0;
-        const remoteTime = remoteData.updatedTime || remoteData.userParams?.timestamp || 0;
+        const localTime =
+            this.getData("updatedTime") ||
+            this.getData("userParams")?.timestamp ||
+            0;
+        const remoteTime =
+            remoteData.updatedTime || remoteData.userParams?.timestamp || 0;
         // Only consider it newer if it's strictly greater (and not equal, to avoid ping-pong)
         return remoteTime > localTime;
     },
@@ -674,7 +759,10 @@ const tagger = {
             const json = atob(base64Data);
             return JSON.parse(json);
         } catch (e) {
-            console.error("[Tagger] Error decoding or parsing remote data: ", e);
+            console.error(
+                "[Tagger] Error decoding or parsing remote data: ",
+                e
+            );
             return null;
         }
     },
@@ -698,12 +786,15 @@ const tagger = {
             this.storeData("userParams", data.userParams);
             window.taggerUserParams = data.userParams; // Update global scope
         }
-        if (data.userCreateTime) this.storeData("userCreateTime", data.userCreateTime);
+        if (data.userCreateTime)
+            this.storeData("userCreateTime", data.userCreateTime);
         if (data.updatedTime) this.storeData("updatedTime", data.updatedTime); // Store the remote updated time
-        if (data.updatedTime) this.storeData("remoteUpdatedTime", data.updatedTime); // Store the remote updated time
+        if (data.updatedTime)
+            this.storeData("remoteUpdatedTime", data.updatedTime); // Store the remote updated time
 
         // userReferrer can also be received
-        if (data.userReferrer) this.storeData("userReferrer", data.userReferrer);
+        if (data.userReferrer)
+            this.storeData("userReferrer", data.userReferrer);
 
         // console.log("[Tagger] Remote data applied.");
         this.triggerEvent(window, "tagger:remoteSyncApplied");
@@ -752,7 +843,7 @@ const tagger = {
         }
 
         const referrer = document.referrer;
-        this.storeData("userReferrer", referrer);
+        this.setUserReferrer(referrer);
 
         return referrer || "";
     },
@@ -762,7 +853,10 @@ const tagger = {
      * @param {string} referrer - The document referrer to set.
      */
     setUserReferrer: function (referrer) {
-        this.storeData("userReferrer", referrer);
+        // Store it after a short delay to avoid blocking
+        setTimeout(() => {
+            this.storeData("userReferrer", referrer);
+        }, 1000);
     },
 
     /**
@@ -778,7 +872,11 @@ const tagger = {
         }
 
         const userAgent = navigator.userAgent;
-        this.storeData("userAgent", userAgent);
+
+        // Store it after a short delay to avoid blocking
+        setTimeout(() => {
+            this.storeData("userAgent", userAgent);
+        }, 1000);
 
         return userAgent || "";
     },
@@ -871,7 +969,10 @@ const tagger = {
             }
             return newURL.href;
         } catch (error) {
-            console.error("[Tagger] Error moving URL params to new URL: ", error);
+            console.error(
+                "[Tagger] Error moving URL params to new URL: ",
+                error
+            );
             return url;
         }
     },
@@ -900,9 +1001,14 @@ const tagger = {
         // Try to get it from the storage first
         let storedIP = this.getData("userIP");
         let ipUpdatedTime = this.getData("userIPUpdatedTime") || 0;
-        const ipCacheDuration = window?.taggerConfig?.ipCacheDuration ?? 86400000; // Default 24 hours
+        const ipCacheDuration =
+            window?.taggerConfig?.ipCacheDuration ?? 86400000; // Default 24 hours
 
-        if (storedIP && this.utilValidateIp(storedIP) && Date.now() - ipUpdatedTime < ipCacheDuration) {
+        if (
+            storedIP &&
+            this.utilValidateIp(storedIP) &&
+            Date.now() - ipUpdatedTime < ipCacheDuration
+        ) {
             this.cachedIP = storedIP;
             return storedIP;
         }
@@ -911,7 +1017,6 @@ const tagger = {
             this.cachedIP = ip;
 
             // Store it after a short delay to avoid blocking
-            // Waiting in here is fine as this is not a critical path
             setTimeout(() => {
                 this.storeData("userIP", ip);
                 this.storeData("userIPUpdatedTime", Date.now());
@@ -919,7 +1024,9 @@ const tagger = {
         };
 
         try {
-            const url = forceIPv4 ? "https://api4.ipify.org/?format=json" : "https://api.ipify.org?format=json";
+            const url = forceIPv4
+                ? "https://api4.ipify.org/?format=json"
+                : "https://api.ipify.org?format=json";
             // Try with IPify first
             const response = await fetch(url);
             if (response.ok) {
@@ -991,7 +1098,9 @@ const tagger = {
         const msgBuffer = new TextEncoder().encode(message);
         const hashBuffer = await crypto.subtle.digest("SHA-1", msgBuffer);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map((b) => ("00" + b.toString(16)).slice(-2)).join("");
+        const hashHex = hashArray
+            .map((b) => ("00" + b.toString(16)).slice(-2))
+            .join("");
         return hashHex;
     },
 
@@ -1010,7 +1119,10 @@ const tagger = {
         const allowedProtocols = ["http:", "https:", "tel:", "#", "/"];
 
         // Check for relative path or allowed protocol
-        if (decodedUrl.startsWith("/") || allowedProtocols.some((p) => decodedUrl.toLowerCase().startsWith(p))) {
+        if (
+            decodedUrl.startsWith("/") ||
+            allowedProtocols.some((p) => decodedUrl.toLowerCase().startsWith(p))
+        ) {
             // If it starts with an allowed protocol or is a relative path, it's safe.
             // We'll return the original (non-decoded) URL to preserve its intended encoding.
             return url;
@@ -1054,7 +1166,14 @@ const tagger = {
             date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
             expires = "; expires=" + date.toUTCString();
         }
-        document.cookie = name + "=" + (value || "") + expires + "; domain=" + this.utilGetCurrentDomain() + "; path=/";
+        document.cookie =
+            name +
+            "=" +
+            (value || "") +
+            expires +
+            "; domain=" +
+            this.utilGetCurrentDomain() +
+            "; path=/";
     },
 
     /**
@@ -1068,7 +1187,8 @@ const tagger = {
         for (let i = 0; i < ca.length; i++) {
             let c = ca[i];
             while (c.charAt(0) === " ") c = c.substring(1, c.length);
-            if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+            if (c.indexOf(nameEQ) === 0)
+                return c.substring(nameEQ.length, c.length);
         }
         return null;
     },
@@ -1118,14 +1238,20 @@ const _taggerAutoInit = () => {
     };
 
     // If DOM is already ready, no need to poll
-    if (document.readyState === "complete" || document.readyState === "interactive") {
+    if (
+        document.readyState === "complete" ||
+        document.readyState === "interactive"
+    ) {
         initialize();
         return;
     }
 
     // Poll until DOM is ready
     const initInterval = setInterval(() => {
-        if (document.readyState === "complete" || document.readyState === "interactive") {
+        if (
+            document.readyState === "complete" ||
+            document.readyState === "interactive"
+        ) {
             clearInterval(initInterval);
             initialize();
         }
