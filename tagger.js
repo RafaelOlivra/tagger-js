@@ -1023,12 +1023,21 @@ const tagger = {
     utilSanitizeString: function (str) {
         if (!str || typeof str !== "string") return "";
 
-        return str
+        // Decode the URL first in case it's already encoded
+        // (This ensures we don't accidentally leave hidden tags like %3Cscript%3E)
+        let decoded;
+        try {
+            decoded = decodeURIComponent(str);
+        } catch (e) {
+            decoded = str;
+        }
+
+        return decoded
             .trim()
-            .replace(/<[^>]*>?/gm, "") // 1. Strip HTML tags (prevents <script>, etc.)
-            .replace(/[<>"'`\\]/g, "") // 2. Strip quotes, brackets, and backslashes
-            .replace(/javascript:/gi, "") // 3. Prevent javascript: protocol execution
-            .substring(0, 2000); // 4. Safety length limit
+            .replace(/<[^>]*>?/gm, "") // Strip HTML
+            .replace(/[<>"'`\\]/g, "") // Strip ONLY dangerous chars (Removed / : % and whitespace from blocklist)
+            .replace(/javascript:/gi, "") // Block JS protocol
+            .substring(0, 2000); // Safety limit
     },
 
     /**
