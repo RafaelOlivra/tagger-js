@@ -626,8 +626,19 @@ const tagger = {
             userReferrer: this.getUserReferrer(),
             userIP,
         };
+
         const json = JSON.stringify(data);
-        const base64 = btoa(json);
+
+        // Convert the string to UTF-8 bytes
+        const bytes = new TextEncoder().encode(json);
+
+        // Convert those bytes to a binary string that btoa accepts
+        // This allows us to handle UTF-8 characters properly
+        let binary = "";
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+
         return { data: base64 };
     },
 
