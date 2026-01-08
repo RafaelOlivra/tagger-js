@@ -273,6 +273,7 @@ const tagger = {
             "utm_medium",
             "utm_campaign",
             "utm_term",
+            "utm_content",
             "gclid",
             "gbraid",
             "fbclid",
