@@ -1016,17 +1016,19 @@ const tagger = {
     },
 
     /**
-     * Sanitizes a string by removing HTML tags and potentially dangerous characters.
+     * Sanitizes a string while preserving URL structures.
      * @param {string} str - The string to sanitize.
      * @returns {string} - The sanitized string.
      */
     utilSanitizeString: function (str) {
         if (!str || typeof str !== "string") return "";
+
         return str
             .trim()
-            .replace(/<[^>]*>?/gm, "") // Strip HTML
-            .replace(/[<>"'/\\%]/g, "") // Strip injection chars
-            .substring(0, 2000); // Length limit
+            .replace(/<[^>]*>?/gm, "") // 1. Strip HTML tags (prevents <script>, etc.)
+            .replace(/[<>"'`\\]/g, "") // 2. Strip quotes, brackets, and backslashes
+            .replace(/javascript:/gi, "") // 3. Prevent javascript: protocol execution
+            .substring(0, 2000); // 4. Safety length limit
     },
 
     /**
