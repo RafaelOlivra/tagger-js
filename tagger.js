@@ -639,7 +639,7 @@ const tagger = {
             binary += String.fromCharCode(bytes[i]);
         }
 
-        return { data: base64 };
+        return { data: btoa(binary) };
     },
 
     /**
@@ -925,7 +925,7 @@ const tagger = {
      * @returns {Promise<string>} - The user's IP address.
      */
     utilGetUserIp: async function (forceIPv4 = false) {
-        forceIPv4 = forceIPv4 ? true : window?.taggerConfig?.forceIPv4 ?? false;
+        forceIPv4 = forceIPv4 ? true : (window?.taggerConfig?.forceIPv4 ?? false);
 
         if (this.cachedIP) return this.cachedIP;
 
